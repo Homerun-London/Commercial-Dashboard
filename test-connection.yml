@@ -1,0 +1,18 @@
+name: Test Mariana Tek connection
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests
+      - run: python scripts/test_connection.py
+        env:
+          MARIANA_API_KEY: ${{ secrets.MARIANA_API_KEY }}
+          MARIANA_BASE_URL: ${{ secrets.MARIANA_BASE_URL }}
