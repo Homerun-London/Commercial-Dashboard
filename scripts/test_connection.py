@@ -14,7 +14,7 @@ if not API_KEY or not BASE_URL:
     sys.exit("Missing MARIANA_API_KEY or MARIANA_BASE_URL secret.")
 
 # If your Enmei scripts send the key a different way, copy that header here.
-HEADERS = {"Authorization": f"Bearer {API_KEY}", "Accept": "application/json"}
+HEADERS = {"Authorization": f"Bearer {API_KEY}", "Accept": "application/vnd.api+json"}
 
 print(f"Base URL: {BASE_URL}\n")
 
