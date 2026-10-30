@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Homerun — Commercial Dashboard</title>
+<!-- ============================================================
+     PASTE YOUR GOOGLE SHEET ID ON THE LINE BELOW (between the quotes)
+     ============================================================ -->
+<script>const SHEET_ID = 'PASTE_HOMERUN_SHEET_ID_HERE';</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=DM+Serif+Display:ital@0;1&display=swap');
+:root{
+  --bg:#0d0d0f;--bg2:#141416;--bg3:#1c1c20;--bg4:#242428;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.14);
+  --text:#f0ede8;--text2:#9b9690;--text3:#5a5752;
+  --enmei:#e8442a;--enmei-dim:rgba(232,68,42,0.14);
+  --teal:#2dd4bf;--teal-bg:rgba(45,212,191,0.13);
+  --slate:#7c93c9;--slate-bg:rgba(124,147,201,0.13);
+  --neg:#e0625a;--neg-bg:rgba(224,98,90,0.13);
+  --radius:10px;--radius-lg:16px;
+  --grid:rgba(255,255,255,0.05);
+  --sans:'Inter',system-ui,sans-serif;
+  --serif:'DM Serif Display',Georgia,serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
+
+.layout{display:flex;height:100vh;overflow:hidden}
+nav{width:230px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
+main{flex:1;overflow-y:auto;padding:28px 32px}
+
+.nav-logo{padding:20px 18px 16px;border-bottom:1px solid var(--border)}
+.nav-logo .wm{font-family:var(--serif);font-size:17px;color:var(--enmei)}
+.nav-logo .ws{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.09em;margin-top:2px}
+.ni{display:flex;align-items:center;gap:9px;padding:7px 11px;margin:1px 7px;border-radius:8px;cursor:pointer;font-size:12.5px;color:var(--text2);border:none;background:none;width:calc(100% - 14px);text-align:left;transition:background .12s,color .12s}
+.ni:hover{background:var(--bg3);color:var(--text)}
+.ni.active{background:var(--enmei-dim);color:var(--text)}
+.ni .pill{margin-left:auto;font-size:9px;background:var(--bg3);border:1px solid var(--border2);padding:1px 5px;border-radius:4px;color:var(--text3)}
+.nb{margin-top:auto;padding:14px;border-top:1px solid var(--border);font-size:11px;color:var(--text3)}
+.live{display:inline-block;width:6px;height:6px;background:var(--teal);border-radius:50%;margin-right:5px;animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+.sync-status{font-size:10px;color:var(--text3);margin-top:4px}
+.sync-status.ok{color:var(--teal)}.sync-status.err{color:var(--neg)}
+
+.ngroup{margin:2px 7px}
+.ngroup-head{display:flex;align-items:center;gap:8px;padding:8px 11px;border-radius:8px;cursor:pointer;font-size:11.5px;font-weight:500;color:var(--text);border:none;background:none;width:100%;text-align:left;transition:background .12s}
+.ngroup-head:hover{background:var(--bg3)}
+.ngroup-head .dot{width:7px;height:7px;border-radius:50%;background:var(--text3);flex-shrink:0}
+.ngroup-head .dot.e{background:var(--enmei)}
+.ngroup-head .chev{margin-left:auto;font-size:9px;color:var(--text3);transition:transform .15s}
+.ngroup.open .ngroup-head .chev{transform:rotate(90deg)}
+.ngroup-body{max-height:0;overflow:hidden;transition:max-height .2s ease}
+.ngroup.open .ngroup-body{max-height:600px}
+.ngroup-body .ni{margin:1px 0 1px 14px;width:calc(100% - 14px)}
+
+.page{display:none}.page.active{display:block}
+.ph{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:20px;gap:12px;flex-wrap:wrap}
+.ph h1{font-family:var(--serif);font-size:26px;font-weight:400;line-height:1.2}
+.ph h1 em{font-style:italic;color:var(--enmei)}
+.ph-sub{font-size:12px;color:var(--text3);margin-top:3px}
+
+.ytabs{display:flex;gap:3px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:3px;flex-wrap:wrap}
+.ytab{padding:4px 12px;border-radius:7px;border:none;background:none;color:var(--text2);font-size:11.5px;font-family:var(--sans);cursor:pointer;transition:all .12s;white-space:nowrap}
+.ytab.active{background:var(--bg3);color:var(--text);border:1px solid var(--border2)}
+
+.custom-range{display:none;gap:8px;align-items:center;margin-top:8px}
+.custom-range.show{display:flex}
+.custom-range input{background:var(--bg3);color:var(--text);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;font-size:12px;font-family:var(--sans)}
+input[type="date"]{
+  background:var(--bg3);color:var(--text);border:1px solid var(--border2);border-radius:7px;
+  padding:6px 12px;font-size:12.5px;font-family:var(--sans);color-scheme:dark;cursor:pointer;
+}
+input[type="date"]:hover{border-color:var(--enmei)}
+input[type="date"]:focus{outline:none;border-color:var(--enmei)}
+input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(0.6);cursor:pointer}
+.as-of-wrap{display:flex;align-items:center;gap:8px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px}
+.custom-range button{background:var(--enmei);color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:12px;cursor:pointer}
+
+.filter-strip{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:flex-start}
+.fg{display:flex;flex-direction:column;gap:4px}
+.fg label{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3)}
+.fg select{background:var(--bg3);color:var(--text);border:1px solid var(--border2);border-radius:6px;padding:6px 10px;font-size:13px;font-family:var(--sans);min-width:150px}
+
+.mgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:10px;margin-bottom:20px}
+.mc{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;position:relative;overflow:hidden}
+.mc::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--enmei)}
+.mc.pos::before{background:var(--teal)}.mc.neg::before{background:var(--neg)}
+.ml{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px}
+.mv{font-size:20px;font-weight:500;letter-spacing:-.02em}
+.ms{font-size:10.5px;color:var(--text3);margin-top:3px}
+.pos-text{color:var(--teal)}.neg-text{color:var(--neg)}
+
+.flag-banner{display:none;align-items:center;gap:8px;background:var(--neg-bg);border:1px solid rgba(224,98,90,0.35);border-radius:var(--radius);padding:10px 14px;margin-bottom:16px;font-size:12.5px;color:var(--text)}
+.flag-banner.show{display:flex}
+.flag-banner .dot{width:7px;height:7px;border-radius:50%;background:var(--neg);flex-shrink:0}
+
+.growth-hero{display:flex;align-items:center;justify-content:space-between;gap:16px;background:var(--bg2);border:1px solid var(--border);border-left:4px solid var(--teal);border-radius:var(--radius-lg);padding:16px 22px;margin-bottom:16px;flex-wrap:wrap}
+.growth-hero.neg{border-left-color:var(--neg)}
+.growth-hero .gh-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+.growth-hero .gh-value{font-family:var(--serif);font-size:28px;font-weight:400}
+.growth-hero .gh-value.pos-text{color:var(--teal)}
+.growth-hero .gh-value.neg-text{color:var(--neg)}
+.growth-hero .gh-sub{font-size:11.5px;color:var(--text2)}
+
+.cr{display:grid;gap:14px;margin-bottom:16px}
+.cr2{grid-template-columns:1fr 1fr}
+@media(max-width:900px){.cr2{grid-template-columns:1fr}}
+.cc{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px}
+.cch{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;gap:8px}
+.cct{font-size:12.5px;font-weight:500}.ccs{font-size:10.5px;color:var(--text3);margin-top:2px}
+.h260{position:relative;height:260px}
+.empty-state{color:var(--text3);font-size:13px;padding:40px 0;text-align:center}
+
+.tc{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:16px}
+.tch{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+.tct{font-size:12.5px;font-weight:500}
+.tscroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+thead th{padding:8px 14px;text-align:right;font-size:10.5px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);white-space:nowrap}
+thead th:first-child,thead th:nth-child(2),thead th:nth-child(3){text-align:left;min-width:110px}
+tbody td{padding:7px 14px;text-align:right;border-bottom:1px solid var(--border);font-size:12px;color:var(--text2);white-space:nowrap}
+tbody td:first-child,tbody td:nth-child(2),tbody td:nth-child(3){text-align:left;color:var(--text)}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:var(--bg3)}
+
+.legend{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px 22px;margin-bottom:16px}
+.legend h3{font-size:12.5px;font-weight:600;margin-bottom:10px;color:var(--text)}
+.legend-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+@media(max-width:900px){.legend-grid{grid-template-columns:1fr}}
+.legend dl{margin:0}
+.legend dt{font-size:12px;font-weight:500;color:var(--text);margin-top:10px}
+.legend dt:first-child{margin-top:0}
+.legend dd{font-size:11.5px;color:var(--text2);margin:2px 0 0;line-height:1.55}
+.legend .caveat{color:var(--neg)}
+
+.soon-box{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;text-align:center;padding:40px}
+.soon-box h2{font-family:var(--serif);font-size:24px;font-weight:400;margin-bottom:12px}
+.soon-box p{font-size:13px;color:var(--text2);max-width:420px;line-height:1.7}
+
+#loading{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;transition:opacity .4s}
+#loading.hidden{opacity:0;pointer-events:none}
+.spinner{width:32px;height:32px;border:2px solid var(--border2);border-top-color:var(--enmei);border-radius:50%;animation:spin .7s linear infinite;margin-bottom:16px}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loading p{font-size:13px;color:var(--text3)}
+
+/* Class Performance -- heatmap grid */
+.hm-wrap{overflow-x:auto}
+.hm-grid{display:grid;gap:2px;min-width:640px}
+.hm-cell{border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9.5px;color:rgba(255,255,255,0.85);min-height:26px;position:relative;cursor:default}
+.hm-cell.empty{background:var(--bg3);color:var(--text3)}
+.hm-cell:hover::after{
+  content:attr(data-tip);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);
+  background:var(--bg4);border:1px solid var(--border2);color:var(--text);font-size:10.5px;
+  padding:4px 8px;border-radius:6px;white-space:nowrap;z-index:20;margin-bottom:4px;pointer-events:none;
+}
+.hm-rowlabel{font-size:10px;color:var(--text3);display:flex;align-items:center;justify-content:flex-end;padding-right:6px}
+.hm-collabel{font-size:9px;color:var(--text3);text-align:center;padding-bottom:3px}
+.hm-legend{display:flex;align-items:center;gap:6px;margin-top:10px;font-size:10.5px;color:var(--text3)}
+.hm-legend-scale{display:flex;height:8px;width:120px;border-radius:4px;overflow:hidden}
+.hm-legend-scale span{flex:1}
+
+.cp-compare-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.cp-studio-check{display:flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:5px 10px;font-size:11.5px;color:var(--text2);cursor:pointer;user-select:none}
+.cp-studio-check input{cursor:pointer}
+.toggle-row{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.toggle-switch{position:relative;width:34px;height:19px;background:var(--bg4);border:1px solid var(--border2);border-radius:10px;cursor:pointer;flex-shrink:0;transition:background .15s}
+.toggle-switch.on{background:var(--enmei)}
+.toggle-switch .knob{position:absolute;top:1px;left:1px;width:15px;height:15px;background:var(--text);border-radius:50%;transition:transform .15s}
+.toggle-switch.on .knob{transform:translateX(15px)}
+.toggle-label{font-size:12px;color:var(--text2)}
+
+.momentum-list{display:flex;flex-direction:column;gap:6px}
+.momentum-row{display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(--bg3);border-radius:8px;font-size:12px}
+.momentum-row .mr-name{color:var(--text)}
+.momentum-row .mr-val{font-weight:500}
+.flag-row{background:var(--bg3);border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:3px}
+.flag-row-top{display:flex;justify-content:space-between;align-items:baseline;font-size:12px}
+.flag-row-top .mr-name{color:var(--text)}
+.flag-row-top .mr-val{font-weight:500}
+.flag-row-sub{font-size:10.5px;color:var(--text3)}
+
+.coach-select-wrap{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+
+</style>
+</head>
+<body>
+
+<div id="loading"><div class="spinner"></div><p id="load-msg">Connecting to Google Sheets…</p></div>
+
+<div class="layout">
+<nav>
+  <div class="nav-logo">
+    <div class="wm">Homerun</div>
+    <div class="ws">Commercial Dashboard</div>
+  </div>
+
+  <div class="ngroup open" id="group-membership">
+    <button class="ngroup-head" onclick="toggleGroup('membership')"><span class="dot e"></span>Membership Health<span class="chev">▶</span></button>
+    <div class="ngroup-body">
+      <button class="ni active" onclick="goTo('mh-overview',this)">Overview</button>
+    </div>
+  </div>
+
+  <div class="ngroup open" id="group-classperf">
+    <button class="ngroup-head" onclick="toggleGroup('classperf')"><span class="dot e"></span>Class Performance<span class="chev">▶</span></button>
+    <div class="ngroup-body">
+      <button class="ni" onclick="goTo('cp-overview',this)">Utilization</button>
+    </div>
+  </div>
+
+  <div class="nb">
+    <span class="live"></span>Live data<br>
+    <span class="sync-status" id="sync-status">Connecting…</span>
+  </div>
+</nav>
+
+<main id="main">
+
+<!-- ══════════════════════ MEMBERSHIP OVERVIEW ══════════════════════ -->
+<div class="page active" id="page-mh-overview">
+  <div class="ph"><div>
+    <h1>Membership <em>Overview</em></h1>
+    <div class="ph-sub">Homerun Mayfair · real purchase/cancellation history · all figures GBP</div>
+  </div></div>
+
+  <div class="growth-hero" id="growth-hero">
+    <div><div class="gh-label">Net member growth</div><div class="gh-value" id="gh-value">—</div></div>
+    <div class="gh-sub" id="gh-sub"></div>
+  </div>
+
+  <div class="flag-banner" id="churn-flag"><span class="dot"></span><span id="churn-flag-text"></span></div>
+  <div class="flag-banner" id="freeze-flag"><span class="dot"></span><span id="freeze-flag-text"></span></div>
+
+  <div style="margin-bottom:16px">
+    <div class="ytabs" id="tf-tabs-ov">
+      <button class="ytab active" onclick="setTimeframe('ov','28d',this)">28D</button>
+      <button class="ytab" onclick="setTimeframe('ov','mtd',this)">MTD</button>
+      <button class="ytab" onclick="setTimeframe('ov','lastmonth',this)">Last Month</button>
+      <button class="ytab" onclick="setTimeframe('ov','ytd',this)">YTD</button>
+      <button class="ytab" onclick="setTimeframe('ov','12m',this)">12M</button>
+      <button class="ytab" onclick="setTimeframe('ov','alltime',this)">All time</button>
+      <button class="ytab" onclick="showCustomRange('ov',this)">Custom</button>
+    </div>
+    <div class="custom-range" id="custom-range-box-ov">
+      <input type="date" id="custom-start-ov">
+      <span style="color:var(--text3);font-size:12px">to</span>
+      <input type="date" id="custom-end-ov">
+      <button onclick="applyCustomRange('ov')">Apply</button>
+    </div>
+    <div style="margin-top:8px">
+      <button class="ytab" onclick="toggleCompareBox('ov')" style="background:var(--bg2);border:1px solid var(--border)">Compare to <span id="compare-toggle-arrow-ov" style="display:inline-block;transition:transform .15s">▶</span><span id="compare-mode-label-ov" style="color:var(--text3);margin-left:4px"></span></button>
+      <div id="compare-box-ov" style="display:none;margin-top:8px">
+        <div class="ytabs" id="compare-tabs-ov">
+          <button class="ytab active" onclick="setCompareMode('ov','none',this)">None</button>
+          <button class="ytab" onclick="setCompareMode('ov','previous_period',this)">Previous Period</button>
+          <button class="ytab" onclick="setCompareMode('ov','previous_month',this)">Previous Month</button>
+          <button class="ytab" onclick="setCompareMode('ov','last_year',this)">Same Period Last Year</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="filter-strip">
+    <div class="fg">
+      <label for="f-tier-ov">Membership tier</label>
+      <select id="f-tier-ov"><option value="all">All tiers</option></select>
+    </div>
+  </div>
+
+  <div class="mgrid" id="ov-metrics"></div>
+
+  <div class="cc" style="margin-bottom:16px">
+    <div class="cch"><div><div class="cct">Ongoing members over time</div><div class="ccs">Not cancelled -- includes frozen &amp; payment failure</div></div></div>
+    <div class="h260"><canvas id="chartActive"></canvas></div>
+  </div>
+
+  <div class="cc" style="margin-bottom:16px">
+    <div class="cch"><div><div class="cct">Status mix</div><div class="ccs">Strict live status, right now. Excludes cancelled, done, terminated</div></div></div>
+    <div class="h260"><canvas id="chartMix"></canvas></div>
+  </div>
+
+  <div class="tc">
+    <div class="tch" style="cursor:pointer" onclick="toggleTableDetail()">
+      <span class="tct">Right now — full detail <span id="table-toggle-arrow" style="display:inline-block;transition:transform .15s">▶</span></span>
+    </div>
+    <div class="tscroll" id="table-detail-body" style="display:none">
+      <table id="m-table">
+        <thead><tr><th>Tier</th><th>Membership Type</th><th>Active</th><th>Frozen</th><th>Terminated</th><th>Payment Fail</th><th>Ding Fail</th><th>Done</th><th>MRR</th></tr></thead>
+        <tbody id="m-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════ CLASS PERFORMANCE: UTILIZATION ══════════════════════ -->
+<div class="page" id="page-cp-overview">
+  <div class="ph"><div>
+    <h1>Class <em>Utilization</em></h1>
+    <div class="ph-sub">Homerun Mayfair · class utilization &amp; cancellations</div>
+  </div></div>
+
+  <div style="margin-bottom:16px">
+    <div class="ytabs" id="tf-tabs-cp">
+      <button class="ytab active" onclick="setTimeframe('cp','28d',this)">28D</button>
+      <button class="ytab" onclick="setTimeframe('cp','mtd',this)">MTD</button>
+      <button class="ytab" onclick="setTimeframe('cp','lastmonth',this)">Last Month</button>
+      <button class="ytab" onclick="setTimeframe('cp','ytd',this)">YTD</button>
+      <button class="ytab" onclick="setTimeframe('cp','12m',this)">12M</button>
+      <button class="ytab" onclick="setTimeframe('cp','alltime',this)">All time</button>
+      <button class="ytab" onclick="showCustomRange('cp',this)">Custom</button>
+    </div>
+    <div class="custom-range" id="custom-range-box-cp">
+      <input type="date" id="custom-start-cp">
+      <span style="color:var(--text3);font-size:12px">to</span>
+      <input type="date" id="custom-end-cp">
+      <button onclick="applyCustomRange('cp')">Apply</button>
+    </div>
+    <div style="margin-top:8px">
+      <button class="ytab" onclick="toggleCompareBox('cp')" style="background:var(--bg2);border:1px solid var(--border)">Compare to <span id="compare-toggle-arrow-cp" style="display:inline-block;transition:transform .15s">▶</span><span id="compare-mode-label-cp" style="color:var(--text3);margin-left:4px"></span></button>
+      <div id="compare-box-cp" style="display:none;margin-top:8px">
+        <div class="ytabs" id="compare-tabs-cp">
+          <button class="ytab active" onclick="setCompareMode('cp','none',this)">None</button>
+          <button class="ytab" onclick="setCompareMode('cp','previous_period',this)">Previous Period</button>
+          <button class="ytab" onclick="setCompareMode('cp','previous_month',this)">Previous Month</button>
+          <button class="ytab" onclick="setCompareMode('cp','last_year',this)">Same Period Last Year</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mgrid" id="cp-metrics"></div>
+
+  <div class="cc" style="margin-bottom:16px">
+    <div class="cch">
+      <div><div class="cct">Utilization heatmap</div><div class="ccs" id="cp-hm-sub">Day of week × class time, selected timeframe</div></div>
+      <div class="coach-select-wrap">
+        <select id="cp-hm-metric" onchange="renderClassPerformance()" style="background:var(--bg3);color:var(--text);border:1px solid var(--border2);border-radius:6px;padding:5px 9px;font-size:11.5px">
+          <option value="util">% Utilization</option>
+          <option value="paid">% Paid Visits</option>
+          <option value="count">Class Count</option>
+        </select>
+      </div>
+    </div>
+    <div class="hm-wrap"><div id="cp-heatmap-single"></div></div>
+    <div class="hm-legend">
+      <span>Low</span>
+      <div class="hm-legend-scale" id="cp-hm-legend-scale"></div>
+      <span>High</span>
+    </div>
+  </div>
+
+  <div class="cc" style="margin-bottom:16px">
+    <div class="cch"><div><div class="cct">Performance flags</div><div class="ccs">Day/time slots at least 12 points above or below the "Avg utilization" number shown above (same timeframe). Trend compares the first half of the selected period to the second half. Needs at least 3 classes in a slot to flag it -- too little data otherwise to trust.</div></div></div>
+    <div class="cr cr2">
+      <div>
+        <div class="ccs" style="margin-bottom:6px">Underperforming</div>
+        <div class="momentum-list" id="cp-flags-under"></div>
+      </div>
+      <div>
+        <div class="ccs" style="margin-bottom:6px">Performing exceptionally</div>
+        <div class="momentum-list" id="cp-flags-over"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cc" style="margin-bottom:16px">
+    <div class="cch"><div><div class="cct">Classes &amp; utilization over time</div><div class="ccs">Weekly · the most recent week is likely partial (still in progress), so its average can look skewed by just a day or two of classes</div></div></div>
+    <div class="h260"><canvas id="chartClassHistory"></canvas></div>
+  </div>
+</div>
+
+</main>
+</div>
+
+<script>
+// Homerun Commercial Dashboard -- Membership Overview + Class Utilization,
+// ported from the Enmei Commercial Dashboard (single studio: Mayfair).
+
+// ════════════════════════════════════════════════════════════════
+// NAVIGATION
+// ════════════════════════════════════════════════════════════════
+function goTo(pageName, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + pageName).classList.add('active');
+  document.querySelectorAll('.ni').forEach(n => n.classList.remove('active'));
+  btn.classList.add('active');
+  if (pageName === 'mh-overview') renderOverview();
+  if (pageName === 'cp-overview') renderClassPerformance();
+}
+function toggleGroup(groupName) {
+  document.getElementById('group-' + groupName).classList.toggle('open');
+}
+function toggleTableDetail() {
+  const body = document.getElementById('table-detail-body');
+  const arrow = document.getElementById('table-toggle-arrow');
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  arrow.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(90deg)';
+}
+
+// ════════════════════════════════════════════════════════════════
+// GVIZ FETCH
+// ════════════════════════════════════════════════════════════════
+async function fetchSheet(tabName) {
+  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(tabName)}`;
+  let res;
+  try {
+    res = await fetch(url);
+  } catch (netErr) {
+    if (window.location.protocol === 'file:') throw new Error('Local file:// cannot fetch Google Sheets. Host this file (GitHub Pages, Netlify, etc.).');
+    throw new Error(`Network error fetching ${tabName}: ${netErr.message}`);
+  }
+  if (!res.ok) throw new Error(`HTTP ${res.status} for tab "${tabName}".`);
+  const text = await res.text();
+  if (text.includes('accounts.google.com') || text.includes('ServiceLogin')) throw new Error('Sheet is not public.');
+  const match = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\)/);
+  if (!match) throw new Error(`Unexpected response for tab "${tabName}".`);
+  return JSON.parse(match[1]).table;
+}
+function parseGvizTable(table) {
+  if (!table || !table.cols || !table.rows) return [];
+  const labels = table.cols.map(c => c.label || c.id);
+  return table.rows.map(row => {
+    const obj = {};
+    labels.forEach((label, i) => { const cell = row.c[i]; obj[label] = cell ? cell.v : null; });
+    return obj;
+  });
+}
+
+
+// ════════════════════════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════════════════════════
+const fK = v => v == null ? '—' : '£' + (Math.round(v/100)/10).toFixed(1) + 'k';
+const fPct = v => v == null || !isFinite(v) ? '—' : (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
+const C = { enmei: '#e8442a', teal: '#2dd4bf', slate: '#7c93c9', neg: '#e0625a', text2: '#9b9690', grid: 'rgba(255,255,255,0.05)' };
+const xsc = () => ({ ticks: { color: C.text2, font: { size: 11 } }, grid: { display: false } });
+const ysc = () => ({ ticks: { color: C.text2, font: { size: 11 }, precision: 0 }, grid: { color: C.grid } });
+const yscCurrency = () => ({ ticks: { color: C.text2, font: { size: 11 }, callback: v => '£' + v.toLocaleString() }, grid: { color: C.grid } });
+const charts = {};
+function mk(id, cfg) { if (charts[id]) charts[id].destroy(); charts[id] = new Chart(document.getElementById(id), cfg); }
+function toISO(d) { return d.toISOString().slice(0, 10); }
+
+
+// ════════════════════════════════════════════════════════════════
+// PER-PAGE STATE  (ov = Membership Overview, cp = Class Utilization)
+// ════════════════════════════════════════════════════════════════
+let HISTORY_ROWS = [], LIVE_ROWS = [];
+let CP_SESSION_ROWS = [], CP_HISTORY_ROWS = [], CP_CANCEL_ROWS = [];
+
+const PAGES = {
+  ov: { studio: 'all', tier: 'all', timeframe: '28d', customRange: null },
+  cp: { studio: 'all', tier: 'all', timeframe: '28d', customRange: null },
+};
+let COMPARE_MODES = { ov: 'none', cp: 'none' };
+
+const LIVE_STATUS_COLS = ['active','frozen','cancelled','terminated','payment_failure','ding_failure','done','pending_customer_activation','pending_start_date','converted'];
+const MIX_STATUS_COLS = LIVE_STATUS_COLS.filter(s => !['cancelled', 'done', 'terminated'].includes(s));
+const TF_LABELS = { '28d': '28D', 'mtd': 'MTD', 'lastmonth': 'Last Month', 'ytd': 'YTD', '12m': '12M', 'alltime': 'All time', 'custom': 'Custom' };
+const COMPARE_LABELS = { none: '', previous_period: '(Previous Period)', previous_month: '(Previous Month)', last_year: '(Same Period Last Year)' };
+
+function setTimeframe(page, mode, btn) {
+  PAGES[page].timeframe = mode;
+  PAGES[page].customRange = null;
+  document.querySelectorAll(`#tf-tabs-${page} .ytab`).forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById(`custom-range-box-${page}`).classList.remove('show');
+  renderPage(page);
+}
+function showCustomRange(page, btn) {
+  document.querySelectorAll(`#tf-tabs-${page} .ytab`).forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById(`custom-range-box-${page}`).classList.add('show');
+}
+function applyCustomRange(page) {
+  const start = document.getElementById(`custom-start-${page}`).value;
+  const end = document.getElementById(`custom-end-${page}`).value;
+  if (!start || !end) return;
+  PAGES[page].customRange = { start, end };
+  PAGES[page].timeframe = 'custom';
+  renderPage(page);
+}
+function setCompareMode(page, mode, btn) {
+  COMPARE_MODES[page] = mode;
+  document.querySelectorAll(`#compare-tabs-${page} .ytab`).forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById(`compare-mode-label-${page}`).textContent = COMPARE_LABELS[mode];
+  renderPage(page);
+}
+function toggleCompareBox(page) {
+  const box = document.getElementById(`compare-box-${page}`);
+  const arrow = document.getElementById(`compare-toggle-arrow-${page}`);
+  const isOpen = box.style.display !== 'none';
+  box.style.display = isOpen ? 'none' : 'block';
+  arrow.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(90deg)';
+}
+
+
+function renderPage(page) {
+  if (page === 'ov') renderOverview();
+  if (page === 'cp') renderClassPerformance();
+}
+
+function populateFilters() {
+  const tiers = Array.from(new Set(HISTORY_ROWS.map(r => r.tier).filter(Boolean))).sort();
+  const tierSel = document.getElementById('f-tier-ov');
+  tiers.forEach(t => tierSel.insertAdjacentHTML('beforeend', `<option value="${t}">${t}</option>`));
+  tierSel.addEventListener('change', () => { PAGES.ov.tier = tierSel.value; renderPage('ov'); });
+}
+
+// ════════════════════════════════════════════════════════════════
+// DATE BOUNDS / FILTERING
+// ════════════════════════════════════════════════════════════════
+function getDateBounds(page) {
+  const st = PAGES[page];
+  if (st.customRange) return { start: st.customRange.start, end: st.customRange.end };
+  const today = new Date();
+  const end = toISO(today);
+  if (st.timeframe === '28d') { const start = new Date(today); start.setDate(start.getDate() - 28); return { start: toISO(start), end }; }
+  if (st.timeframe === 'mtd') { const start = new Date(today.getFullYear(), today.getMonth(), 1); return { start: toISO(start), end }; }
+  if (st.timeframe === 'lastmonth') {
+    const start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const lastDay = new Date(today.getFullYear(), today.getMonth(), 0);
+    return { start: toISO(start), end: toISO(lastDay) };
+  }
+  if (st.timeframe === 'ytd') { const start = new Date(today.getFullYear(), 0, 1); return { start: toISO(start), end }; }
+  if (st.timeframe === '12m') { const start = new Date(today); start.setDate(start.getDate() - 365); return { start: toISO(start), end }; }
+  return { start: '2000-01-01', end };
+}
+
+function getComparisonBounds(page) {
+  if (COMPARE_MODES[page] === 'none') return null;
+  const { start, end } = getDateBounds(page);
+  const startDate = new Date(start), endDate = new Date(end);
+  if (COMPARE_MODES[page] === 'previous_period') {
+    const durationMs = endDate - startDate;
+    const newEnd = new Date(startDate); newEnd.setDate(newEnd.getDate() - 1);
+    const newStart = new Date(newEnd.getTime() - durationMs);
+    return { start: toISO(newStart), end: toISO(newEnd) };
+  }
+  if (COMPARE_MODES[page] === 'previous_month') {
+    const newStart = new Date(startDate); newStart.setMonth(newStart.getMonth() - 1);
+    const newEnd = new Date(endDate); newEnd.setMonth(newEnd.getMonth() - 1);
+    return { start: toISO(newStart), end: toISO(newEnd) };
+  }
+  if (COMPARE_MODES[page] === 'last_year') {
+    const newStart = new Date(startDate); newStart.setFullYear(newStart.getFullYear() - 1);
+    const newEnd = new Date(endDate); newEnd.setFullYear(newEnd.getFullYear() - 1);
+    return { start: toISO(newStart), end: toISO(newEnd) };
+  }
+  return null;
+}
+
+function applyCommonFilters(page, rows) {
+  const st = PAGES[page];
+  return rows.filter(r => st.tier === 'all' || r.tier === st.tier);
+}
+function getHistoryRows(page) {
+  const { start, end } = getDateBounds(page);
+  return applyCommonFilters(page, HISTORY_ROWS).filter(r => r.week >= start && r.week <= end);
+}
+function getComparisonHistoryRows(page) {
+  const bounds = getComparisonBounds(page);
+  if (!bounds) return [];
+  return applyCommonFilters(page, HISTORY_ROWS).filter(r => r.week >= bounds.start && r.week <= bounds.end);
+}
+function getLiveRows(page) {
+  return applyCommonFilters(page, LIVE_ROWS);
+}
+
+function aggregateByWeek(rows) {
+  const byWeek = new Map();
+  for (const row of rows) {
+    const key = row.week;
+    if (!byWeek.has(key)) byWeek.set(key, { week: key, active_count: 0, new_count: 0, cancelled_count: 0, frozen_count: 0, revenue: 0 });
+    const e = byWeek.get(key);
+    e.active_count += Number(row.active_count) || 0;
+    e.new_count += Number(row.new_count) || 0;
+    e.cancelled_count += Number(row.cancelled_count) || 0;
+    e.frozen_count += Number(row.frozen_count) || 0;
+    e.revenue += Number(row.revenue) || 0;
+  }
+  return Array.from(byWeek.values()).sort((a, b) => a.week.localeCompare(b.week));
+}
+// Churn rate as a single ratio (cancelled-in-range / active-at-start-of-range)
+// breaks down for long lookbacks -- the starting denominator can be tiny
+// (e.g. early in the business) while cancellations accumulate from many
+// different people who joined later, producing nonsense numbers like 173%.
+// Instead: average each week's OWN churn rate (that week's cancellations /
+// that week's active count) across the range -- this stays properly
+// bounded no matter how long a lookback you pick.
+function averageWeeklyChurnRate(weekly) {
+  const rates = weekly.filter(w => w.active_count > 0).map(w => (w.cancelled_count / w.active_count) * 100);
+  if (rates.length === 0) return null;
+  return rates.reduce((a, b) => a + b, 0) / rates.length;
+}
+function revenueByGroup(rows, groupField) {
+  const byGroup = new Map();
+  for (const row of rows) {
+    const key = row[groupField] || 'Unknown';
+    if (!byGroup.has(key)) byGroup.set(key, 0);
+    byGroup.set(key, byGroup.get(key) + (Number(row.active_revenue) || 0));
+  }
+  return Array.from(byGroup.entries()).map(([group, revenue]) => ({ group, revenue })).sort((a, b) => b.revenue - a.revenue);
+}
+function statusMix(rows) {
+  const totals = {};
+  MIX_STATUS_COLS.forEach(s => totals[s] = 0);
+  for (const row of rows) MIX_STATUS_COLS.forEach(s => totals[s] += (Number(row[s]) || 0));
+  return MIX_STATUS_COLS.map(s => ({ status: s, count: totals[s] })).filter(d => d.count > 0);
+}
+
+
+// ════════════════════════════════════════════════════════════════
+// RENDER: MEMBERSHIP OVERVIEW
+// ════════════════════════════════════════════════════════════════
+function renderOverview() {
+  const historyRows = getHistoryRows('ov');
+  const liveRows = getLiveRows('ov');
+  const weekly = aggregateByWeek(historyRows);
+
+  const latestOngoing = weekly.length ? weekly[weekly.length - 1].active_count : 0;
+  const currentMRR = liveRows.reduce((s, r) => s + (Number(r.active_revenue) || 0), 0);
+  const currentFrozen = liveRows.reduce((s, r) => s + (Number(r.frozen) || 0), 0);
+  const ongoingStart = weekly.length ? weekly[0].active_count : null;
+  const ongoingEnd = weekly.length ? weekly[weekly.length - 1].active_count : null;
+  const growthPct = (weekly.length >= 2 && ongoingStart > 0) ? ((ongoingEnd - ongoingStart) / ongoingStart) * 100 : null;
+  const totalNewInPeriod = weekly.reduce((s, w) => s + w.new_count, 0);
+  const totalCancelledInPeriod = weekly.reduce((s, w) => s + w.cancelled_count, 0);
+  const churnPct = averageWeeklyChurnRate(weekly);
+
+  const flagBanner = document.getElementById('churn-flag');
+  if (totalCancelledInPeriod > totalNewInPeriod && weekly.length > 0) {
+    flagBanner.classList.add('show');
+    document.getElementById('churn-flag-text').textContent = `Cancellations (${totalCancelledInPeriod}) exceeded new signups (${totalNewInPeriod}) over the selected time range.`;
+  } else flagBanner.classList.remove('show');
+
+  const freezeFlagBanner = document.getElementById('freeze-flag');
+  const frozenStart = weekly.length ? weekly[0].frozen_count : null;
+  const frozenEnd = weekly.length ? weekly[weekly.length - 1].frozen_count : null;
+  if (frozenStart != null && frozenEnd != null && frozenStart > 0 && (frozenEnd - frozenStart) / frozenStart >= 0.5 && (frozenEnd - frozenStart) >= 5) {
+    freezeFlagBanner.classList.add('show');
+    document.getElementById('freeze-flag-text').textContent = `Frozen memberships rose from ${frozenStart} to ${frozenEnd} over the selected time range -- worth understanding why.`;
+  } else freezeFlagBanner.classList.remove('show');
+
+  const heroEl = document.getElementById('growth-hero');
+  const ghValue = document.getElementById('gh-value');
+  const ghSub = document.getElementById('gh-sub');
+  const netChange = (ongoingEnd != null && ongoingStart != null) ? (ongoingEnd - ongoingStart) : null;
+  if (netChange == null) {
+    ghValue.textContent = '—'; ghSub.textContent = 'Not enough data in this range yet'; heroEl.classList.remove('neg');
+  } else {
+    const sign = netChange >= 0 ? '+' : '';
+    ghValue.textContent = `${sign}${netChange.toLocaleString()} members (${fPct(growthPct)})`;
+    ghValue.className = 'gh-value ' + (netChange >= 0 ? 'pos-text' : 'neg-text');
+    ghSub.textContent = `${ongoingStart.toLocaleString()} -> ${ongoingEnd.toLocaleString()} ongoing members over the selected range`;
+    heroEl.classList.toggle('neg', netChange < 0);
+  }
+
+  let compHtml = { ongoing: '', mrr: '', cancelled: '', growth: '', churn: '' };
+  if (COMPARE_MODES.ov !== 'none') {
+    const compWeekly = aggregateByWeek(getComparisonHistoryRows('ov'));
+    const compLabel = { previous_period: 'vs previous period', previous_month: 'vs previous month', last_year: 'vs same period last year' }[COMPARE_MODES.ov];
+    if (compWeekly.length > 0) {
+      const compOngoingStart = compWeekly[0].active_count;
+      const compOngoingEnd = compWeekly[compWeekly.length - 1].active_count;
+      const compRevenueEnd = compWeekly[compWeekly.length - 1].revenue;
+      const compTotalCancelled = compWeekly.reduce((s, w) => s + w.cancelled_count, 0);
+      const compGrowthPct = (compOngoingStart > 0) ? ((compOngoingEnd - compOngoingStart) / compOngoingStart) * 100 : null;
+      const compChurnPct = (compOngoingStart > 0) ? (compTotalCancelled / compOngoingStart) * 100 : null;
+      const pctChange = (curr, prev) => (prev != null && prev !== 0) ? ((curr - prev) / Math.abs(prev)) * 100 : null;
+      const deltaSpan = (delta, invertColor) => { if (delta == null) return ''; const isGood = invertColor ? delta <= 0 : delta >= 0; return `<div class="ms ${isGood ? 'pos-text' : 'neg-text'}">${fPct(delta)} ${compLabel}</div>`; };
+      compHtml.ongoing = deltaSpan(pctChange(latestOngoing, compOngoingEnd), false);
+      compHtml.mrr = deltaSpan(pctChange(currentMRR, compRevenueEnd), false);
+      compHtml.cancelled = deltaSpan(pctChange(totalCancelledInPeriod, compTotalCancelled), true);
+      compHtml.growth = (growthPct != null && compGrowthPct != null) ? `<div class="ms">${(growthPct - compGrowthPct >= 0 ? '+' : '')}${(growthPct - compGrowthPct).toFixed(1)}pp ${compLabel}</div>` : '';
+      compHtml.churn = (churnPct != null && compChurnPct != null) ? `<div class="ms ${churnPct - compChurnPct <= 0 ? 'pos-text' : 'neg-text'}">${(churnPct - compChurnPct >= 0 ? '+' : '')}${(churnPct - compChurnPct).toFixed(1)}pp ${compLabel}</div>` : '';
+    } else {
+      const noData = `<div class="ms">No data ${compLabel}</div>`;
+      compHtml = { ongoing: noData, mrr: noData, cancelled: noData, growth: noData, churn: noData };
+    }
+  }
+
+  document.getElementById('ov-metrics').innerHTML = `
+    <div class="mc"><div class="ml">Ongoing members (not cancelled)</div><div class="mv">${latestOngoing.toLocaleString()}</div>${compHtml.ongoing}</div>
+    <div class="mc pos"><div class="ml">Monthly Recurring Revenue</div><div class="mv">${fK(currentMRR)}</div>${compHtml.mrr}</div>
+    <div class="mc neg"><div class="ml">Cancelled (${TF_LABELS[PAGES.ov.timeframe]})</div><div class="mv">${totalCancelledInPeriod.toLocaleString()}</div>${compHtml.cancelled}</div>
+    <div class="mc"><div class="ml">Currently frozen</div><div class="mv">${currentFrozen.toLocaleString()}</div></div>
+    <div class="mc"><div class="ml">Growth (selected range)</div><div class="mv ${growthPct == null ? '' : (growthPct >= 0 ? 'pos-text' : 'neg-text')}">${fPct(growthPct)}</div>${compHtml.growth}</div>
+    <div class="mc"><div class="ml">Avg weekly churn rate</div><div class="mv ${churnPct == null ? '' : 'neg-text'}">${churnPct == null ? '—' : churnPct.toFixed(1) + '%'}</div>${compHtml.churn}</div>
+  `;
+
+  renderStatusMixAndTable();
+
+  if (weekly.length === 0) { if (charts.chartActive) { charts.chartActive.destroy(); delete charts.chartActive; } return; }
+  mk('chartActive', { type: 'line', data: { labels: weekly.map(w => w.week), datasets: [{ data: weekly.map(w => w.active_count), borderColor: C.enmei, backgroundColor: 'rgba(232,68,42,0.1)', fill: true, tension: .3, pointRadius: 2 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: xsc(), y: ysc() } } });
+}
+
+function renderStatusMixAndTable() {
+  const liveRows = getLiveRows('ov');
+
+  const tbody = document.getElementById('m-table-body');
+  tbody.innerHTML = liveRows.length === 0 ? `<tr><td colspan="9" class="empty-state">No data for this filter.</td></tr>` :
+    liveRows.sort((a, b) => (Number(b.active) || 0) - (Number(a.active) || 0)).map(r =>
+      `<tr><td>${r.tier || '—'}</td><td>${r.membership_name || '—'}</td><td>${r.active || 0}</td><td>${r.frozen || 0}</td>
+       <td>${r.terminated || 0}</td><td>${r.payment_failure || 0}</td><td>${r.ding_failure || 0}</td><td>${r.done || 0}</td><td>${fK(r.active_revenue)}</td></tr>`
+    ).join('');
+
+  const mix = statusMix(liveRows);
+  mk('chartMix', { type: 'bar', data: { labels: mix.map(s => s.status.replace(/_/g,' ')), datasets: [{ data: mix.map(s => s.count), backgroundColor: C.neg, borderRadius: 4, borderSkipped: false }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: xsc(), y: ysc() } } });
+}
+
+// ════════════════════════════════════════════════════════════════
+// CLASS PERFORMANCE: UTILIZATION
+// ════════════════════════════════════════════════════════════════
+let CP_NORM_ROWS = [];
+function normalizeSession(r) {
+  const time = r['Class Time'] || '';
+  // BUG FIX: this used to round down to the top of the hour
+  // (split(':')[0] + ':00'), so an 8:30pm class showed as "20:00" -- since
+  // real classes run consistently on the half-hour, that mislabeled
+  // EVERY class, and it also fed the coach benchmark grouping (studio +
+  // time slot), meaning a 20:30 class was being compared against a
+  // slot that doesn't exist rather than other real 20:30 classes. Now
+  // preserves the exact HH:MM instead of rounding.
+  const hour = time ? String(time).slice(0, 5) : null;
+  return {
+    studio: r.Location,
+    date: r['Class Date'],
+    time: String(time),
+    hour,
+    dayOfWeek: r['Class Day of Week'],
+    instructors: (r.Instructors || '').split(',').map(s => s.trim()).filter(Boolean),
+    isExcluded: !!r.Is_Excluded_Class,
+    unassigned: !!r.Unassigned_Instructor_Flag,
+    checkedIn: Number(r['Checked In Reservations']) || 0,
+    lateCancelled: Number(r['Late Cancelled Reservations']) || 0,
+    noShow: Number(r['No Showed Reservations']) || 0,
+    adminHolds: Number(r['Admin Holds']) || 0,
+    capacity: Number(r['Actual Capacity']) || 0,
+    utilPct: r['% Utilization'] != null && r['% Utilization'] !== '' ? Number(r['% Utilization']) : null,
+    paidVisits: Number(r['Paid Visits']) || 0,
+    paidPct: r['Total % Paid Visits'] != null && r['Total % Paid Visits'] !== '' ? Number(r['Total % Paid Visits']) : null,
+  };
+}
+function ensureCPNormalized() {
+  if (CP_NORM_ROWS.length === 0 && CP_SESSION_ROWS.length > 0) CP_NORM_ROWS = CP_SESSION_ROWS.map(normalizeSession);
+}
+const DAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+// Half-hour granularity (06:00 -> 21:30), since real class times are now
+// preserved exactly (see normalizeSession) rather than rounded to the
+// hour. buildHeatmap() only renders columns that actually have data, so
+// this doesn't force every heatmap to show all 32 slots.
+const HOUR_ORDER = Array.from({ length: 32 }, (_, i) => {
+  const h = 6 + Math.floor(i / 2);
+  const m = i % 2 === 0 ? '00' : '30';
+  return String(h).padStart(2, '0') + ':' + m;
+});
+
+function getCPRows(page, studioOverride) {
+  ensureCPNormalized();
+  const st = PAGES[page];
+  const studio = studioOverride !== undefined ? studioOverride : st.studio;
+  const { start, end } = getDateBounds(page);
+  return CP_NORM_ROWS.filter(r => {
+    if (r.isExcluded) return false;
+    if (studio !== 'all' && r.studio !== studio) return false;
+    if (!r.date || r.date < start || r.date > end) return false;
+    return true;
+  });
+}
+function getCPComparisonRows(page) {
+  const bounds = getComparisonBounds(page);
+  if (!bounds) return [];
+  ensureCPNormalized();
+  const st = PAGES[page];
+  return CP_NORM_ROWS.filter(r => {
+    if (r.isExcluded) return false;
+    if (st.studio !== 'all' && r.studio !== st.studio) return false;
+    if (!r.date || r.date < bounds.start || r.date > bounds.end) return false;
+    return true;
+  });
+}
+function getCPCancelledCount(page, studioOverride, boundsOverride) {
+  const st = PAGES[page];
+  const studio = studioOverride !== undefined ? studioOverride : st.studio;
+  const { start, end } = boundsOverride || getDateBounds(page);
+  return CP_CANCEL_ROWS.filter(r => (studio === 'all' || r.studio === studio) && r.week >= start && r.week <= end)
+    .reduce((s, r) => s + (Number(r.cancelled_classes) || 0), 0);
+}
+function mean(arr) { const v = arr.filter(x => x != null && isFinite(x)); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; }
+
+// Fixed 0-100% color scale so intensity is comparable across studios and
+// across the compare view. Breakpoints are deliberately shifted so a
+// strong class (80%+) already reads as visually "hot" rather than
+// reserving full saturation only for values near 100% -- a flat linear
+// gradient made genuinely good numbers (e.g. 82%) look washed out.
+function heatColor(pct) {
+  if (pct == null || !isFinite(pct)) return null;
+  const p = Math.max(0, Math.min(100, pct)) / 100;
+  // Muted-low-range traffic light: 0-45% stays clearly red in HUE but
+  // muted in brightness (rare in real data, so kept visually quiet
+  // rather than alarming); 45-100% gets richer, more differentiated
+  // color since that's where real utilization values actually cluster.
+  const stops = [
+    { p: 0, c: [185, 75, 70] },
+    { p: 0.45, c: [195, 140, 105] },
+    { p: 0.55, c: [217, 175, 70] },
+    { p: 0.65, c: [170, 180, 75] },
+    { p: 0.75, c: [110, 178, 82] },
+    { p: 0.88, c: [60, 165, 80] },
+    { p: 1, c: [40, 150, 70] },
+  ];
+  let lo = stops[0], hi = stops[stops.length - 1];
+  for (let i = 0; i < stops.length - 1; i++) { if (p >= stops[i].p && p <= stops[i + 1].p) { lo = stops[i]; hi = stops[i + 1]; break; } }
+  const t = (hi.p === lo.p) ? 0 : (p - lo.p) / (hi.p - lo.p);
+  const c = lo.c.map((v, i) => Math.round(v + (hi.c[i] - v) * t));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+function renderHeatLegend(elId) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  const steps = 10;
+  el.innerHTML = Array.from({ length: steps }, (_, i) => `<span style="background:${heatColor(i / (steps - 1) * 100)}"></span>`).join('');
+}
+
+// Builds one heatmap grid -- TIME as rows, DAY OF WEEK as columns (the
+// way Remy reads a heatmap), from an already-filtered set of normalized
+// rows. metric: 'util' (% Utilization), 'paid' (% Paid Visits), or
+// 'count' (raw class count).
+// Builds one heatmap grid -- DAY OF WEEK as rows, TIME as columns
+// (reverted back from the transposed version -- felt clunky with 16
+// time columns squeezed vertically; this wide-and-short layout reads
+// better and is closer to the arrangement in Remy's own notebook).
+function buildHeatmap(containerId, rows, metric) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const cells = new Map(); // "day|hour" -> { sum, n }
+  rows.forEach(r => {
+    if (!r.dayOfWeek || !r.hour) return;
+    const key = r.dayOfWeek + '|' + r.hour;
+    if (!cells.has(key)) cells.set(key, { sum: 0, n: 0 });
+    const c = cells.get(key);
+    const v = metric === 'util' ? r.utilPct : metric === 'paid' ? r.paidPct : 1;
+    if (v != null) { c.sum += v; c.n += 1; }
+  });
+  const hoursUsed = HOUR_ORDER.filter(h => DAY_ORDER.some(d => cells.has(d + '|' + h)));
+  const hours = hoursUsed.length ? hoursUsed : HOUR_ORDER;
+  if (rows.length === 0) { container.innerHTML = `<div class="empty-state">No data for this selection.</div>`; return; }
+
+  let maxCount = 1;
+  if (metric === 'count') cells.forEach(c => { if (c.n > maxCount) maxCount = c.n; });
+
+  const gridCols = `70px repeat(${hours.length}, 1fr)`;
+  let html = `<div class="hm-grid" style="grid-template-columns:${gridCols}">`;
+  html += `<div></div>` + hours.map(h => `<div class="hm-collabel">${h}</div>`).join('');
+  DAY_ORDER.forEach(day => {
+    html += `<div class="hm-rowlabel">${day}</div>`;
+    hours.forEach(hour => {
+      const c = cells.get(day + '|' + hour);
+      if (!c || c.n === 0) { html += `<div class="hm-cell empty"></div>`; return; }
+      const avg = c.sum / c.n;
+      const bg = metric === 'count' ? heatColor((c.n / maxCount) * 100) : heatColor(avg);
+      const label = metric === 'count' ? c.n : avg.toFixed(0) + '%';
+      const tip = `${day} ${hour} — ${metric === 'count' ? c.n + ' classes' : avg.toFixed(1) + '%'} (n=${c.n})`;
+      html += `<div class="hm-cell" style="background:${bg}" data-tip="${tip}">${label}</div>`;
+    });
+  });
+  html += `</div>`;
+  container.innerHTML = html;
+}
+
+// Flags day/time slots that are meaningfully above or below the overall
+// average utilization for the current selection -- so a Wednesday 6pm
+// class that's consistently half-empty doesn't just sit quietly in the
+// heatmap, it surfaces as something to act on. Requires at least
+// MIN_SLOT_N classes in a slot before flagging it -- one bad class on a
+// rainy Tuesday isn't a pattern. Studio is included in the grouping key
+// even when "All Studios" is selected, so a slot flag never blends two
+// different studios' 9am classes into one misleading number -- when in
+// "All Studios" mode the studio name is shown alongside the flag so it's
+// clear which one it's about.
+const MIN_SLOT_N = 3;
+const SLOT_FLAG_THRESHOLD = 12; // percentage points from the overall average
+function computeSlotFlags(rows, overallAvg, start, end, showStudio) {
+  if (overallAvg == null) return { under: [], over: [] };
+  const startMs = new Date(start).getTime(), endMs = new Date(end).getTime();
+  const midMs = startMs + (endMs - startMs) / 2;
+  const cells = new Map(); // "studio|day|hour" -> stats
+  rows.forEach(r => {
+    if (!r.dayOfWeek || !r.hour || r.utilPct == null || !r.date) return;
+    const key = r.studio + '|' + r.dayOfWeek + '|' + r.hour;
+    if (!cells.has(key)) cells.set(key, { sum: 0, n: 0, firstSum: 0, firstN: 0, secondSum: 0, secondN: 0 });
+    const c = cells.get(key);
+    c.sum += r.utilPct; c.n += 1;
+    const rMs = new Date(r.date).getTime();
+    if (rMs < midMs) { c.firstSum += r.utilPct; c.firstN += 1; } else { c.secondSum += r.utilPct; c.secondN += 1; }
+  });
+  const results = [];
+  cells.forEach((c, key) => {
+    if (c.n < MIN_SLOT_N) return;
+    const avg = c.sum / c.n;
+    const delta = avg - overallAvg;
+    if (Math.abs(delta) < SLOT_FLAG_THRESHOLD) return;
+    const [studio, day, hour] = key.split('|');
+    // Trend needs at least 2 classes in EACH half of the selected period
+    // to say anything -- otherwise it's noise, not a trend.
+    const trend = (c.firstN >= 2 && c.secondN >= 2) ? (c.secondSum / c.secondN) - (c.firstSum / c.firstN) : null;
+    results.push({ studio, day, hour, avg, n: c.n, delta, trend });
+  });
+  const under = results.filter(r => r.delta < 0).sort((a, b) => a.delta - b.delta).slice(0, 5);
+  const over = results.filter(r => r.delta > 0).sort((a, b) => b.delta - a.delta).slice(0, 5);
+  return { under, over };
+}
+function renderSlotFlagRow(r, showStudio) {
+  const label = (showStudio ? r.studio + ' · ' : '') + r.day.slice(0, 3) + ' ' + r.hour;
+  const deltaAbs = Math.abs(r.delta).toFixed(0);
+  const deltaWord = r.delta >= 0
+    ? `${deltaAbs} points above the studio's overall average utilization`
+    : `${deltaAbs} points below the studio's overall average utilization`;
+  let trendWord = 'not enough data yet to show a trend';
+  if (r.trend != null) {
+    if (r.trend >= 3) trendWord = `improving — up ${r.trend.toFixed(0)} points over the period`;
+    else if (r.trend <= -3) trendWord = `declining — down ${Math.abs(r.trend).toFixed(0)} points over the period`;
+    else trendWord = 'holding steady over the period';
+  }
+  return `<div class="flag-row">
+    <div class="flag-row-top"><span class="mr-name">${label}</span><span class="mr-val ${r.delta >= 0 ? 'pos-text' : 'neg-text'}">${r.avg.toFixed(0)}%</span></div>
+    <div class="flag-row-sub">${deltaWord} · ${r.n} classes · ${trendWord}</div>
+  </div>`;
+}
+
+
+function renderClassPerformance() {
+  ensureCPNormalized();
+  const rows = getCPRows('cp');
+  const totalClasses = rows.length;
+  const cancelledCount = getCPCancelledCount('cp');
+  const avgUtil = mean(rows.map(r => r.utilPct));
+  const avgPaid = mean(rows.map(r => r.paidPct));
+
+  const { start: cpStart, end: cpEnd } = getDateBounds('cp');
+  const daysInRange = Math.max(1, Math.round((new Date(cpEnd) - new Date(cpStart)) / 86400000) + 1);
+  const avgPerDay = totalClasses / daysInRange;
+
+  let compHtml = { classes: '', cancelled: '', util: '', paid: '', perDay: '' };
+  if (COMPARE_MODES.cp !== 'none') {
+    const compRows = getCPComparisonRows('cp');
+    const compBounds = getComparisonBounds('cp');
+    const compLabel = { previous_period: 'vs previous period', previous_month: 'vs previous month', last_year: 'vs same period last year' }[COMPARE_MODES.cp];
+    if (compRows.length > 0 || compBounds) {
+      const compCancelled = getCPCancelledCount('cp', undefined, compBounds);
+      const pctChange = (curr, prev) => (prev != null && prev !== 0) ? ((curr - prev) / Math.abs(prev)) * 100 : null;
+      const deltaSpan = (delta, invertColor) => { if (delta == null) return ''; const isGood = invertColor ? delta <= 0 : delta >= 0; return `<div class="ms ${isGood ? 'pos-text' : 'neg-text'}">${fPct(delta)} ${compLabel}</div>`; };
+      compHtml.classes = deltaSpan(pctChange(totalClasses, compRows.length), false);
+      compHtml.cancelled = deltaSpan(pctChange(cancelledCount, compCancelled), true);
+      const compAvgUtil = mean(compRows.map(r => r.utilPct));
+      const compAvgPaid = mean(compRows.map(r => r.paidPct));
+      compHtml.util = (avgUtil != null && compAvgUtil != null) ? `<div class="ms ${avgUtil - compAvgUtil >= 0 ? 'pos-text' : 'neg-text'}">${(avgUtil - compAvgUtil >= 0 ? '+' : '')}${(avgUtil - compAvgUtil).toFixed(1)}pp ${compLabel}</div>` : '';
+      compHtml.paid = (avgPaid != null && compAvgPaid != null) ? `<div class="ms ${avgPaid - compAvgPaid >= 0 ? 'pos-text' : 'neg-text'}">${(avgPaid - compAvgPaid >= 0 ? '+' : '')}${(avgPaid - compAvgPaid).toFixed(1)}pp ${compLabel}</div>` : '';
+      if (compBounds) {
+        const compDays = Math.max(1, Math.round((new Date(compBounds.end) - new Date(compBounds.start)) / 86400000) + 1);
+        const compAvgPerDay = compRows.length / compDays;
+        compHtml.perDay = deltaSpan(pctChange(avgPerDay, compAvgPerDay), false);
+      }
+    }
+  }
+
+  document.getElementById('cp-metrics').innerHTML = `
+    <div class="mc"><div class="ml">Number of classes</div><div class="mv">${totalClasses.toLocaleString()}</div>${compHtml.classes}</div>
+    <div class="mc"><div class="ml">Avg classes per day</div><div class="mv">${avgPerDay.toFixed(1)}</div>${compHtml.perDay}<div class="ms">Over ${daysInRange} day${daysInRange === 1 ? '' : 's'} in the selected timeframe</div></div>
+    <div class="mc neg"><div class="ml">Classes cancelled</div><div class="mv">${cancelledCount.toLocaleString()}</div>${compHtml.cancelled}<div class="ms">All cancelled sessions on the schedule — can include a class entered by mistake or a coach training session, not only genuine lost classes</div></div>
+    <div class="mc"><div class="ml">Avg utilization</div><div class="mv">${avgUtil == null ? '—' : avgUtil.toFixed(1) + '%'}</div>${compHtml.util}<div class="ms">People who actually attended (checked-in only)</div></div>
+    <div class="mc"><div class="ml">Avg paid visit %</div><div class="mv">${avgPaid == null ? '—' : avgPaid.toFixed(1) + '%'}</div>${compHtml.paid}<div class="ms">Includes late cancellations &amp; no-shows — still paid for, whether or not they attended</div></div>
+  `;
+
+  const metric = document.getElementById('cp-hm-metric').value;
+  buildHeatmap('cp-heatmap-single', rows, metric);
+  renderHeatLegend('cp-hm-legend-scale');
+
+  const { start: flagStart, end: flagEnd } = getDateBounds('cp');
+  const slotFlags = computeSlotFlags(rows, avgUtil, flagStart, flagEnd, false);
+  document.getElementById('cp-flags-under').innerHTML = slotFlags.under.length
+    ? slotFlags.under.map(r => renderSlotFlagRow(r, false)).join('')
+    : `<div class="empty-state">Nothing meaningfully underperforming for this selection.</div>`;
+  document.getElementById('cp-flags-over').innerHTML = slotFlags.over.length
+    ? slotFlags.over.map(r => renderSlotFlagRow(r, false)).join('')
+    : `<div class="empty-state">Nothing standing out yet for this selection.</div>`;
+
+  // Weekly trend chart, from the precomputed history rollup (already
+  // scoped to studio via the studio toggle; 'all' sums across studios).
+  const st = PAGES.cp;
+  const { start, end } = getDateBounds('cp');
+  const histFiltered = CP_HISTORY_ROWS.filter(r => (st.studio === 'all' || r.studio === st.studio) && r.week >= start && r.week <= end);
+  const byWeek = new Map();
+  histFiltered.forEach(r => {
+    if (!byWeek.has(r.week)) byWeek.set(r.week, { classes: 0, utilSum: 0, utilN: 0 });
+    const e = byWeek.get(r.week);
+    e.classes += Number(r.total_classes) || 0;
+    if (r.avg_utilization != null) { e.utilSum += Number(r.avg_utilization); e.utilN += 1; }
+  });
+  const weeks = Array.from(byWeek.keys()).sort();
+  mk('chartClassHistory', { type: 'bar', data: { labels: weeks, datasets: [
+    { type: 'bar', label: 'Number of classes', data: weeks.map(w => byWeek.get(w).classes), backgroundColor: 'rgba(124,147,201,0.5)', yAxisID: 'y' },
+    { type: 'line', label: 'Avg utilization %', data: weeks.map(w => { const e = byWeek.get(w); return e.utilN ? e.utilSum / e.utilN : null; }), borderColor: C.enmei, backgroundColor: C.enmei, tension: 0.3, yAxisID: 'y1' },
+  ] }, options: { responsive: true, maintainAspectRatio: false, scales: {
+    x: xsc(), y: { ...ysc(), position: 'left' }, y1: { position: 'right', ticks: { color: C.text2, font: { size: 11 }, callback: v => v + '%' }, grid: { display: false } },
+  }, plugins: { legend: { labels: { color: C.text2, font: { size: 11 } } } } } });
+}
+
+
+async function init() {
+  const loading = document.getElementById('loading');
+  const status = document.getElementById('sync-status');
+  try {
+    if (SHEET_ID.includes('PASTE')) throw new Error('Paste the Homerun Google Sheet ID into SHEET_ID at the top of docs/index.html.');
+    const [historyTable, liveTable] = await Promise.all([
+      fetchSheet('Membership_History'), fetchSheet('Membership_Live_Status'),
+    ]);
+    HISTORY_ROWS = parseGvizTable(historyTable);
+    LIVE_ROWS = parseGvizTable(liveTable);
+
+    // Class Performance tabs -- non-blocking, so a problem here doesn't
+    // take down Membership Overview.
+    const [cpSessionsResult, cpHistoryResult, cpCancelResult] = await Promise.allSettled([
+      fetchSheet('ClassPerformance_Sessions'), fetchSheet('ClassPerformance_History'), fetchSheet('ClassPerformance_Cancellations'),
+    ]);
+    CP_SESSION_ROWS = cpSessionsResult.status === 'fulfilled' ? parseGvizTable(cpSessionsResult.value) : [];
+    CP_HISTORY_ROWS = cpHistoryResult.status === 'fulfilled' ? parseGvizTable(cpHistoryResult.value) : [];
+    CP_CANCEL_ROWS = cpCancelResult.status === 'fulfilled' ? parseGvizTable(cpCancelResult.value) : [];
+    if (cpSessionsResult.status === 'rejected') console.error('ClassPerformance_Sessions load error:', cpSessionsResult.reason);
+
+    status.textContent = `Live · ${HISTORY_ROWS.length} history rows · ${CP_SESSION_ROWS.length} classes`;
+    status.classList.add('ok');
+    loading.classList.add('hidden');
+    populateFilters();
+    renderOverview();
+    renderClassPerformance();
+  } catch (e) {
+    console.error('Sheet load error:', e);
+    loading.classList.add('hidden');
+    status.textContent = 'Sheet error — see console';
+    status.classList.add('err');
+    document.getElementById('ov-metrics').innerHTML = `<div class="mc"><div class="ml">Error</div><div class="mv" style="font-size:13px">${e.message}</div></div>`;
+  }
+}
+init();
+</script>
+</body>
+</html>
