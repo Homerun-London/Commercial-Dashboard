@@ -70,7 +70,7 @@ def classify_tier(name):
     if m:
         return f"{int(m.group(1))} Classes"
 
-    if "unlimited" in name_lower:
+    if "unlimited" in name_lower or "founding membership" in name_lower:
         return "Unlimited"
 
     return "Other/Unclassified"
