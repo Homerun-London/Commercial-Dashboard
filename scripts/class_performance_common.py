@@ -24,15 +24,14 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 
-import gspread
-from google.oauth2.service_account import Credentials
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from config import DASHBOARD_SHEET_ID, EXCLUDED_CLASS_TYPES as _EXCLUDED  # noqa: E402
+from config import EXCLUDED_CLASS_TYPES as _EXCLUDED  # noqa: E402
+sys.path.insert(0, str(Path(__file__).parent))
+from sheet_writer import write_to_sheet  # noqa: E402,F401  (re-exported as base.write_to_sheet)
 
 BASE_URL = os.environ["MARIANA_BASE_URL"].rstrip("/")
 HEADERS = {"Authorization": f"Bearer {os.environ['MARIANA_API_KEY']}"}
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 EXCLUDED_CLASS_TYPES = {t.strip().lower() for t in _EXCLUDED}
 
@@ -95,6 +94,15 @@ def clean_sessions_df(raw_df):
         np.nan,
     )
 
+    # Booking source (of PAID visits). Direct = Paid Visits - Third-Party, so
+    # private-class admin holds count as direct and the two always add up.
+    tp_cols = ["ClassPass Bookings", "Wellhub Bookings", "Other Third-Party Bookings"]
+    if all(c in df.columns for c in tp_cols):
+        for c in tp_cols:
+            df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
+        df["Third-Party Bookings"] = df[tp_cols].sum(axis=1)
+        df["Direct Bookings"] = (df["Paid Visits"] - df["Third-Party Bookings"]).clip(lower=0)
+
     class_type_lower = df["Class Type"].astype(str).str.strip().str.lower()
     df["Is_Excluded_Class"] = class_type_lower.isin(EXCLUDED_CLASS_TYPES)
 
@@ -155,39 +163,20 @@ def build_class_history(sessions_df):
     return out
 
 
-def write_to_sheet(df, tab_name, max_retries=4):
-    """Same retry-wrapped overwrite pattern used everywhere else."""
-    creds_json = os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]
-    creds_dict = json.loads(creds_json)
-    creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
-    client = gspread.authorize(creds)
-
-    df_out = df.copy()
-    for col in df_out.columns:
-        if pd.api.types.is_datetime64_any_dtype(df_out[col]):
-            df_out[col] = df_out[col].astype(str).replace("NaT", "")
-    # Guard against any leftover list-typed columns (e.g. Instructor_List
-    # if it isn't dropped before writing) -- gspread can't serialize them.
-    for col in df_out.columns:
-        if df_out[col].apply(lambda v: isinstance(v, list)).any():
-            df_out[col] = df_out[col].apply(lambda v: ", ".join(v) if isinstance(v, list) else v)
-
-    values = [df_out.columns.tolist()] + df_out.astype(object).where(df_out.notna(), "").values.tolist()
-
-    for attempt in range(max_retries):
-        try:
-            sh = client.open_by_key(DASHBOARD_SHEET_ID)
-            try:
-                worksheet = sh.worksheet(tab_name)
-            except gspread.exceptions.WorksheetNotFound:
-                worksheet = sh.add_worksheet(title=tab_name, rows=max(len(df) + 10, 100), cols=len(df.columns) + 2)
-            worksheet.clear()
-            worksheet.update(values, "A1")
-            print(f"Wrote {len(df_out)} rows to '{tab_name}' tab.")
-            return
-        except gspread.exceptions.APIError as e:
-            wait = 2 ** attempt
-            print(f"'{tab_name}': Google Sheets API error ({e}), retrying in {wait}s...")
-            time.sleep(wait)
-
-    raise RuntimeError(f"Failed to write '{tab_name}' after {max_retries} attempts")
+def build_cancellations_daily(cancelled_df, start_date):
+    """Daily cancelled-class counts per studio, by SCHEDULED class date.
+    cancelled_classes excludes non-class types (so delivered + cancelled =
+    scheduled group classes); cancelled_all includes everything."""
+    cols = ["date", "studio", "cancelled_classes", "cancelled_all"]
+    if cancelled_df is None or len(cancelled_df) == 0:
+        return pd.DataFrame(columns=cols)
+    c = cancelled_df[cancelled_df["start_date"] >= pd.Timestamp(start_date)].copy()
+    if len(c) == 0:
+        return pd.DataFrame(columns=cols)
+    c["date"] = c["start_date"].dt.strftime("%Y-%m-%d")
+    c["is_class"] = ~c["class_type_lower"].fillna("").isin(EXCLUDED_CLASS_TYPES)
+    out = (c.groupby(["date", "location"])
+             .agg(cancelled_classes=("is_class", "sum"), cancelled_all=("is_class", "size"))
+             .reset_index().rename(columns={"location": "studio"}))
+    out["cancelled_classes"] = out["cancelled_classes"].astype(int)
+    return out[cols].sort_values(["date", "studio"])

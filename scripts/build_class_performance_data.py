@@ -20,8 +20,13 @@ Changed for Homerun: single studio. The Mariana Tek location ID is looked up
 by STUDIO_NAME on every run (or the only location is used if there is just
 one). Every run prints all class types and reservation statuses seen.
 
+Third-party bookings: paid bookings carrying Mariana Tek's ClassPass /
+Wellhub / FitReserve system tags (matched by slug). Each run prints a check
+that the tags agree with "booking has no membership/credit transaction",
+the evidence Enmei used to trust the split.
+
 Writes: ClassPerformance_Sessions, ClassPerformance_History,
-ClassPerformance_Cancellations.
+ClassPerformance_Cancellations, ClassPerformance_CancellationsDaily.
 
 Required environment variables:
     MARIANA_API_KEY, MARIANA_BASE_URL, GOOGLE_SERVICE_ACCOUNT_JSON
@@ -46,8 +51,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 import class_performance_common as base  # noqa: E402
 from config import (  # noqa: E402
-    STUDIO_NAME, DASHBOARD_SHEET_ID, CLASS_HISTORY_START, INSTRUCTOR_NAME_OVERRIDES,
-    TAB_CLASS_SESSIONS, TAB_CLASS_HISTORY, TAB_CLASS_CANCELLATIONS,
+    STUDIO_NAME, DASHBOARD_SHEET_ID, CLASS_HISTORY_START, INSTRUCTOR_NAME_OVERRIDES, THIRD_PARTY_TAG_SLUGS,
+    TAB_CLASS_SESSIONS, TAB_CLASS_HISTORY, TAB_CLASS_CANCELLATIONS, TAB_CLASS_CANCELLATIONS_DAILY,
 )
 
 # Every reservation status we know about. Anything else seen in the data is
@@ -184,6 +189,27 @@ def load_instructor_display_names():
     return out
 
 
+def load_third_party_tags():
+    """reservation tag id -> platform label (ClassPass / Wellhub / ...),
+    matched by slug (system tags), never by ID. Failure here must not stop
+    the run: every booking is then treated as direct, loudly."""
+    out = {}
+    try:
+        seen = []
+        for t in pull_pages("reservation_tags", {}):
+            slug = (t["attributes"].get("slug") or "").strip().lower()
+            seen.append(slug or t["attributes"].get("name", ""))
+            if slug in THIRD_PARTY_TAG_SLUGS:
+                out[t["id"]] = THIRD_PARTY_TAG_SLUGS[slug]
+        print(f"Reservation tags on this account: {seen}")
+        print(f"Third-party tags matched: {sorted(set(out.values())) or 'NONE'}")
+        if not out:
+            print("!!! WARNING: no ClassPass/Wellhub/FitReserve tags found -- every booking will count as DIRECT.")
+    except Exception as e:  # noqa: BLE001
+        print(f"!!! WARNING: couldn't load reservation tags ({e}) -- every booking will count as DIRECT.")
+    return out
+
+
 def load_holds():
     """Unreleased admin / unavailable holds, counted per class. The report
     counts only holds that have not been released (validated: 100% match),
@@ -214,11 +240,22 @@ def pull_sessions(loc_id, start, end, label=""):
     return list(seen.values())
 
 
-def aggregate_reservations(loc_id, start, end, label=""):
-    """Stream reservations and keep only per-class status counters (never
-    the rows themselves). Pulled by class date + location, then counted
-    client-side -- the reservations 'status' filter is not reliable."""
+PAID_STATUSES = {"check in", "penalty cancel", "penalty no show"}
+PLATFORM_ORDER = list(dict.fromkeys(THIRD_PARTY_TAG_SLUGS.values()))
+
+
+def aggregate_reservations(loc_id, start, end, label="", tag_map=None, tp_check=None):
+    """Stream reservations and keep only per-class counters (never the rows
+    themselves). Pulled by class date + location, then counted client-side
+    -- the reservations 'status' filter is not reliable.
+
+    Returns (status_counts, platform_counts): platform counts are kept in a
+    SEPARATE counter (never mixed into statuses -- that caused a false
+    "UNKNOWN STATUS" warning at Enmei) and only cover PAID bookings
+    (check in, late cancel, no-show), since % direct is a share of paid visits."""
+    tag_map = tag_map or {}
     counts = defaultdict(Counter)          # class id -> Counter of status keys
+    platforms = defaultdict(Counter)       # class id -> Counter of platform labels
     n = 0
     for w_start, w_end in month_windows(start, end):
         for rec in pull_pages("reservations", {
@@ -235,9 +272,24 @@ def aggregate_reservations(loc_id, start, end, label=""):
             counts[cs][status] += 1
             if status == "pending":
                 counts[cs][f"pending:{at.get('reservation_type')}"] += 1
+            if status in PAID_STATUSES:
+                labels = {tag_map[t] for t in rel_ids(rec, "tags") if t in tag_map}
+                platform = next((p for p in PLATFORM_ORDER if p in labels), None)
+                if platform:
+                    platforms[cs][platform] += 1
+                if tp_check is not None:
+                    rels = rec.get("relationships") or {}
+                    has_rel_fields = "membership_transactions" in rels or "credit_transactions" in rels
+                    no_txn = not rel_ids(rec, "membership_transactions") and not rel_ids(rec, "credit_transactions")
+                    tp_check["paid"] += 1
+                    tp_check["tagged"] += bool(platform)
+                    if has_rel_fields:
+                        tp_check["checkable"] += 1
+                        tp_check["no_txn"] += no_txn
+                        tp_check["tagged_and_no_txn"] += bool(platform) and no_txn
         print(f"  [{label}] reservations through {w_end}: {n} so far", flush=True)
     print(f"  [{label}] {n} reservations aggregated.", flush=True)
-    return counts
+    return counts, platforms
 
 
 # --------------------------------------------------------------------------
@@ -281,6 +333,8 @@ def build_raw_frames(start, end):
     display_names = load_instructor_display_names()
     name_source = Counter()
     active_admin, active_unavailable = load_holds()
+    tag_map = load_third_party_tags()
+    tp_check = Counter()
 
     LOCATIONS = resolve_location()
     fetched = []
@@ -288,12 +342,12 @@ def build_raw_frames(start, end):
         t0 = time.time()
         print(f"\nPulling {loc_name} ({start} -> {end}) ...", flush=True)
         recs = pull_sessions(loc_id, start, end, loc_name)
-        counts = aggregate_reservations(loc_id, start, end, loc_name)
+        counts, platforms = aggregate_reservations(loc_id, start, end, loc_name, tag_map, tp_check)
         print(f"[{loc_name}] finished in {time.time() - t0:.0f}s", flush=True)
-        fetched.append((loc_name, recs, counts))
+        fetched.append((loc_name, recs, counts, platforms))
 
     session_rows, cancelled_rows = [], []
-    for loc_name, recs, counts in fetched:
+    for loc_name, recs, counts, platforms in fetched:
         print(f"[{loc_name}] {len(recs)} sessions ({sum(1 for r in recs if r['attributes'].get('cancellation_datetime'))} cancelled)")
 
         for rec in recs:
@@ -304,6 +358,7 @@ def build_raw_frames(start, end):
                     "start_time": at.get("start_time"), "class_type": at.get("class_type_display"),
                     "cancellation_datetime": at.get("cancellation_datetime"),
                     "instructor_names": at.get("instructor_names"),
+                    "class_type_lower": str(at.get("class_type_display") or "").strip().lower(),
                 })
                 continue
 
@@ -347,12 +402,16 @@ def build_raw_frames(start, end):
                 # extras, not in report 294
                 "Waived Late Cancels": c[STATUS_LATE_CANCEL_WAIVED],
                 "Waived No Shows": c[STATUS_NO_SHOW_WAIVED],
+                # Third-party PAID bookings (Direct = Paid Visits - Third-Party, added in cleaning)
+                "ClassPass Bookings": platforms.get(cs, Counter())["ClassPass"],
+                "Wellhub Bookings": platforms.get(cs, Counter())["Wellhub"],
+                "Other Third-Party Bookings": platforms.get(cs, Counter())["Other Third-Party"],
             })
 
     print(f"Instructor names came from: {dict(name_source)}")
 
     status_totals = Counter()
-    for _, _, counts in fetched:
+    for _, _, counts, _ in fetched:
         for per_class in counts.values():
             status_totals.update({k: v for k, v in per_class.items() if not str(k).startswith("pending:")})
     print("\nReservation statuses seen (count):")
@@ -362,6 +421,17 @@ def build_raw_frames(start, end):
     if unknown:
         print(f"\n!!! WARNING: {len(unknown)} reservation status(es) not recognised: {unknown}. "
               f"They are NOT counted as paid visits. Tell Claude so they can be classified.")
+    print("\nThird-party check (paid bookings only):")
+    print(f"  paid bookings: {tp_check['paid']}, tagged third-party: {tp_check['tagged']}")
+    if tp_check["checkable"]:
+        print(f"  with no membership/credit transaction: {tp_check['no_txn']}; tagged AND no transaction: {tp_check['tagged_and_no_txn']}")
+        if tp_check["tagged"] == tp_check["no_txn"] == tp_check["tagged_and_no_txn"]:
+            print("  -> tags and 'no transaction' agree exactly: third-party split is trustworthy.")
+        else:
+            print("  -> tags and 'no transaction' DIFFER: tell Claude these numbers before relying on % direct.")
+    else:
+        print("  (transaction links not present on reservations -- agreement check skipped)")
+
     raw_sessions = pd.DataFrame(session_rows)
     if len(raw_sessions):
         print("\nClass types seen (count) -- add any that aren't coach-led classes to EXCLUDED_CLASS_TYPES in config.py:")
@@ -372,7 +442,7 @@ def build_raw_frames(start, end):
     if len(cancelled):
         cancelled["start_date"] = pd.to_datetime(cancelled["start_date"], errors="coerce")
     else:
-        cancelled = pd.DataFrame(columns=["location", "start_date", "cancellation_datetime"])
+        cancelled = pd.DataFrame(columns=["location", "start_date", "cancellation_datetime", "class_type_lower"])
         cancelled["start_date"] = pd.to_datetime(cancelled["start_date"])
     return raw_sessions, cancelled
 
@@ -396,6 +466,7 @@ def main():
 
     cancellations_df = base.build_cancellations_history(cancelled, start_date)
     print(f"Raw build: {int(cancellations_df['cancelled_classes'].sum()) if len(cancellations_df) else 0} cancelled classes since {start_date}.")
+    cancellations_daily_df = base.build_cancellations_daily(cancelled, start_date)
     history_df = base.build_class_history(sessions_df)
     sessions_export = sessions_df.drop(columns=["Instructor_List"]).copy()
 
@@ -411,11 +482,14 @@ def main():
         print(history_df.tail(12).to_string())
         print("\n--- Cancellations ---")
         print(cancellations_df.tail(12).to_string())
+        print("\n--- Cancellations daily (last 10) ---")
+        print(cancellations_daily_df.tail(10).to_string())
         return
 
     base.write_to_sheet(sessions_export, TAB_CLASS_SESSIONS)
     base.write_to_sheet(history_df, TAB_CLASS_HISTORY)
     base.write_to_sheet(cancellations_df, TAB_CLASS_CANCELLATIONS)
+    base.write_to_sheet(cancellations_daily_df, TAB_CLASS_CANCELLATIONS_DAILY)
 
 
 if __name__ == "__main__":

@@ -41,12 +41,13 @@ import requests
 import pandas as pd
 from pathlib import Path
 
-import gspread
-from google.oauth2.service_account import Credentials
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import (DASHBOARD_SHEET_ID, STUDIO_NAME, EXCLUDED_MEMBERSHIP_KEYWORDS, REDUCED_PRICE_KEYWORDS,
-                    TAB_LIVE_STATUS, TAB_HISTORY, TAB_CUSTOMER_LOG, TAB_AGE_PYRAMID)
+                    UNLIMITED_KEYWORDS, TAB_LIVE_STATUS, TAB_HISTORY, TAB_CUSTOMER_LOG, TAB_AGE_PYRAMID,
+                    TAB_MEMBERSHIP_DAILY)
+sys.path.insert(0, str(Path(__file__).parent))
+from sheet_writer import write_to_sheet  # noqa: E402
 
 BASE_URL = os.environ["MARIANA_BASE_URL"].rstrip("/")
 HEADERS = {"Authorization": f"Bearer {os.environ['MARIANA_API_KEY']}"}
@@ -70,7 +71,7 @@ def classify_tier(name):
     if m:
         return f"{int(m.group(1))} Classes"
 
-    if "unlimited" in name_lower or "founding membership" in name_lower:
+    if any(kw.lower() in name_lower for kw in UNLIMITED_KEYWORDS):
         return "Unlimited"
 
     return "Other/Unclassified"
@@ -381,6 +382,43 @@ def build_history(df):
     return pd.concat(results, ignore_index=True)
 
 
+def build_daily(df):
+    """Same rules as build_history, at DAILY resolution, for rolling
+    windows (the weekly report's "last 7 days ending yesterday").
+
+    One row per studio per day D, snapshot instant T = start of D+1 (UTC):
+      active_count / frozen_count -- ongoing / frozen at T (same masks as weekly)
+      new_count       -- real new starts in (T-1d, T], switches excluded
+      cancelled_count -- real cancellations in (T-1d, T], switches excluded
+    So 7 daily new_counts sum to the weekly new_count, and Sunday's
+    active_count equals the following Monday's weekly active_count."""
+    valid_start = df["start_date"].notna()
+    if not valid_start.any():
+        return pd.DataFrame(columns=["date", "studio", "active_count", "frozen_count", "new_count", "cancelled_count", "active_only_revenue"])
+    first = df.loc[valid_start, "start_date"].min().normalize()
+    today = pd.Timestamp.now(tz="utc").normalize()
+    days = pd.date_range(first, today - pd.Timedelta(days=1), freq="D")
+    real_churn = df[~df["is_switch_cancellation"]]
+
+    rows = []
+    for studio, sdf in df.groupby("studio"):
+        rc = real_churn[real_churn["studio"] == studio]
+        for d in days:
+            t = d + pd.Timedelta(days=1)
+            active = (sdf["start_date"] <= t) & (sdf["cancellation_datetime"].isna() | (sdf["cancellation_datetime"] > t))
+            frozen = active & sdf["freeze_datetime"].notna() & (sdf["freeze_datetime"] <= t) & (
+                sdf["freeze_reactivation_datetime"].isna() | (sdf["freeze_reactivation_datetime"] > t))
+            new = (sdf["start_date"] > d) & (sdf["start_date"] <= t) & (~sdf["is_switch_new"])
+            cancelled = (rc["cancellation_datetime"] > d) & (rc["cancellation_datetime"] <= t)
+            rows.append({
+                "date": d.date().isoformat(), "studio": studio,
+                "active_count": int(active.sum()), "frozen_count": int(frozen.sum()),
+                "new_count": int(new.sum()), "cancelled_count": int(cancelled.sum()),
+                "active_only_revenue": round(float(sdf.loc[active & ~frozen, "renewal_rate"].sum()), 2),
+            })
+    return pd.DataFrame(rows)
+
+
 AGE_BUCKET_BINS = [0, 30, 60, 90, 180, 365, 730, float("inf")]
 AGE_BUCKET_LABELS = ["0-30 days", "30-60 days", "60-90 days", "3-6 months",
                       "6-12 months", "12-24 months", "24+ months"]
@@ -447,42 +485,6 @@ def build_customer_log(df):
     return log_df
 
 
-def write_to_sheet(df, tab_name, max_retries=4):
-    """Authenticate and OVERWRITE the given tab (full recompute each run, not append).
-    Retries the whole sequence on transient Google API errors (e.g. 503
-    service unavailable) -- safe to retry since clear+rewrite is idempotent."""
-    creds_json = os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]
-    creds_dict = json.loads(creds_json)
-    creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
-    client = gspread.authorize(creds)
-
-    # Convert any datetime columns to strings before writing (Sheets API needs plain values)
-    df_out = df.copy()
-    for col in df_out.columns:
-        if pd.api.types.is_datetime64_any_dtype(df_out[col]):
-            df_out[col] = df_out[col].astype(str).replace("NaT", "")
-    values = [df_out.columns.tolist()] + df_out.astype(object).where(df_out.notna(), "").values.tolist()
-
-    for attempt in range(max_retries):
-        try:
-            sh = client.open_by_key(DASHBOARD_SHEET_ID)
-            try:
-                worksheet = sh.worksheet(tab_name)
-            except gspread.exceptions.WorksheetNotFound:
-                worksheet = sh.add_worksheet(title=tab_name, rows=max(len(df) + 10, 100), cols=len(df.columns) + 2)
-
-            worksheet.clear()
-            worksheet.update(values, "A1")
-            print(f"Wrote {len(df_out)} rows to '{tab_name}' tab (full overwrite).")
-            return
-        except gspread.exceptions.APIError as e:
-            wait = 2 ** attempt
-            print(f"'{tab_name}': Google Sheets API error ({e}), retrying in {wait}s...")
-            time.sleep(wait)
-
-    raise RuntimeError(f"Failed to write '{tab_name}' after {max_retries} attempts")
-
-
 def main():
     if "PASTE" in DASHBOARD_SHEET_ID and os.environ.get("DEBUG_ONLY_SKIP_SHEET_WRITE") != "true":
         sys.exit("Set DASHBOARD_SHEET_ID in config.py first (or run with debug_only=true).")
@@ -495,6 +497,10 @@ def main():
     print("\nBuilding full historical weekly reconstruction...")
     history_df = build_history(df)
     print(f"History: {history_df.shape[0]} rows")
+
+    print("\nBuilding daily snapshots...")
+    daily_df = build_daily(df)
+    print(f"Daily: {daily_df.shape[0]} rows")
 
     print("\nBuilding membership age pyramid...")
     age_pyramid_df = build_age_pyramid(df)
@@ -512,6 +518,8 @@ def main():
         print(history_df.tail(10).to_string())
         print("\n--- Age pyramid ---")
         print(age_pyramid_df.to_string())
+        print("\n--- Daily (last 10) ---")
+        print(daily_df.tail(10).to_string())
         print("\n--- Customer log (head) ---")
         print(customer_log_df.head(10).to_string())
         return
@@ -520,6 +528,7 @@ def main():
     write_to_sheet(history_df, TAB_HISTORY)
     write_to_sheet(age_pyramid_df, TAB_AGE_PYRAMID)
     write_to_sheet(customer_log_df, TAB_CUSTOMER_LOG)
+    write_to_sheet(daily_df, TAB_MEMBERSHIP_DAILY)
 
 
 if __name__ == "__main__":
