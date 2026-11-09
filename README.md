@@ -1,7 +1,8 @@
 # Homerun Commercial Dashboard
 
-Membership Overview and Class Utilization for Homerun Mayfair, built on
-Mariana Tek data. Ported from the Enmei Commercial Dashboard: same pipeline
+Membership Overview, Intro Offers (Overview, Comparison & Conversion) and
+Class Utilization (with direct vs third-party bookings) for Homerun Mayfair,
+built on Mariana Tek data. Ported from the Enmei Commercial Dashboard: same pipeline
 logic, set up for a single studio.
 
 ## How it fits together
@@ -11,8 +12,13 @@ logic, set up for a single studio.
    counts only, no client PII).
 2. `scripts/build_class_performance_data.py` pulls class sessions,
    reservations and spot holds and writes the `ClassPerformance_*` tabs.
-3. Both run daily via GitHub Actions (8:00 and 9:00 UTC).
-4. `docs/index.html` reads the Sheet live through Google's `gviz` endpoint.
+3. `scripts/build_intro_offers_dashboard_data.py` rebuilds every customer's
+   purchase timeline and writes `IntroOffers_Starters` (one row per intro
+   starter, IDs only).
+4. All three run daily via GitHub Actions (8:00, 8:30 and 9:00 UTC). Every
+   write goes through `scripts/sheet_writer.py`, which clears any filter or
+   hidden rows on the tab first (they hide rows from the dashboard).
+5. `docs/index.html` reads the Sheet live through Google's `gviz` endpoint.
 
 ## Setup
 
