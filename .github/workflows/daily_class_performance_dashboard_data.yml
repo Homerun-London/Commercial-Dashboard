@@ -1,0 +1,42 @@
+name: Daily Class Performance Dashboard Data Refresh
+
+# Builds Class Performance from Mariana Tek's RAW data (class sessions,
+# reservations, spot holds). Writes the ClassPerformance_* tabs.
+
+on:
+  schedule:
+    - cron: '0 9 * * *'  # Daily, 9:00 UTC (after Membership's 8:00 run)
+  workflow_dispatch:
+    inputs:
+      debug_only:
+        description: 'Debug only -- inspect data in logs, skip writing to Google Sheets'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+      history_start:
+        description: 'Optional: shorten a TEST run by starting from this date (YYYY-MM-DD). Only works with debug_only=true.'
+        required: false
+        default: ''
+        type: string
+
+jobs:
+  refresh-data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - name: Build Class Performance from raw Mariana Tek data and write to Google Sheet
+        env:
+          MARIANA_API_KEY: ${{ secrets.MARIANA_API_KEY }}
+          MARIANA_BASE_URL: ${{ secrets.MARIANA_BASE_URL }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          DEBUG_ONLY_SKIP_SHEET_WRITE: ${{ github.event.inputs.debug_only || 'false' }}
+          CP_RAW_HISTORY_START: ${{ github.event.inputs.history_start || '' }}
+        run: python scripts/build_class_performance_data.py
