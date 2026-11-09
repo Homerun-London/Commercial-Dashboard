@@ -27,7 +27,7 @@ CLASS_HISTORY_START = "2025-01-01"
 # Mariana Tek's is_intro_offer flag proved unreliable at Enmei, so we match
 # by name. Empty until we've seen Homerun's real product names -- every run
 # prints the full list in the log.
-EXCLUDED_MEMBERSHIP_KEYWORDS = []
+EXCLUDED_MEMBERSHIP_KEYWORDS = ["1 week unlimited"]
 
 # Names containing any of these are classed as "Reduced Price".
 REDUCED_PRICE_KEYWORDS = ["student", "teacher", "healthcare", "influencer", "staff"]
