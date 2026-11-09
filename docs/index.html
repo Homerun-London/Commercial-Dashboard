@@ -7,8 +7,9 @@
 <!-- ============================================================
      PASTE YOUR GOOGLE SHEET ID ON THE LINE BELOW (between the quotes)
      ============================================================ -->
-<script>const SHEET_ID = '12mmWJHy6dm9E3iIMvDgKrXwRbxHVIhqWZfBBcK2F0tc';</script>
+<script>const SHEET_ID = 'PASTE_HOMERUN_SHEET_ID_HERE';</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-sankey@0.12.0/dist/chartjs-chart-sankey.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=DM+Serif+Display:ital@0;1&display=swap');
 :root{
@@ -94,6 +95,10 @@ input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(0.6);cursor:
 
 .flag-banner{display:none;align-items:center;gap:8px;background:var(--neg-bg);border:1px solid rgba(224,98,90,0.35);border-radius:var(--radius);padding:10px 14px;margin-bottom:16px;font-size:12.5px;color:var(--text)}
 .flag-banner.show{display:flex}
+.data-status{display:none;background:var(--bg2);border:1px solid var(--border2);border-left:3px solid #d9af46;border-radius:var(--radius);padding:10px 14px;margin-bottom:18px;font-size:12px;color:var(--text2)}
+.data-status.show{display:block}
+.data-status div+div{margin-top:4px}
+.data-status b{color:var(--text);font-weight:500}
 .flag-banner .dot{width:7px;height:7px;border-radius:50%;background:var(--neg);flex-shrink:0}
 
 .growth-hero{display:flex;align-items:center;justify-content:space-between;gap:16px;background:var(--bg2);border:1px solid var(--border);border-left:4px solid var(--teal);border-radius:var(--radius-lg);padding:16px 22px;margin-bottom:16px;flex-wrap:wrap}
@@ -203,6 +208,14 @@ tbody tr:hover td{background:var(--bg3)}
     </div>
   </div>
 
+  <div class="ngroup open" id="group-introoffers">
+    <button class="ngroup-head" onclick="toggleGroup('introoffers')"><span class="dot e"></span>Intro Offers<span class="chev">▶</span></button>
+    <div class="ngroup-body">
+      <button class="ni" onclick="goTo('io-overview',this)">Overview</button>
+      <button class="ni" onclick="goTo('io-comparison',this)">Comparison &amp; Conversion</button>
+    </div>
+  </div>
+
   <div class="ngroup open" id="group-classperf">
     <button class="ngroup-head" onclick="toggleGroup('classperf')"><span class="dot e"></span>Class Performance<span class="chev">▶</span></button>
     <div class="ngroup-body">
@@ -217,6 +230,8 @@ tbody tr:hover td{background:var(--bg3)}
 </nav>
 
 <main id="main">
+
+<div class="data-status" id="data-status"></div>
 
 <!-- ══════════════════════ MEMBERSHIP OVERVIEW ══════════════════════ -->
 <div class="page active" id="page-mh-overview">
@@ -294,6 +309,110 @@ tbody tr:hover td{background:var(--bg3)}
   </div>
 </div>
 
+<!-- ══════════════════════ INTRO OFFERS: OVERVIEW ══════════════════════ -->
+<div class="page" id="page-io-overview">
+  <div class="ph"><div>
+    <h1>Intro Offers <em>Overview</em></h1>
+    <div class="ph-sub">Homerun Mayfair · who started on an intro offer, and what they did next</div>
+  </div></div>
+
+  <div style="margin-bottom:16px">
+    <div class="ytabs" id="tf-tabs-io">
+      <button class="ytab" onclick="setTimeframe('io','28d',this)">28D</button>
+      <button class="ytab" onclick="setTimeframe('io','mtd',this)">MTD</button>
+      <button class="ytab" onclick="setTimeframe('io','lastmonth',this)">Last Month</button>
+      <button class="ytab" onclick="setTimeframe('io','ytd',this)">YTD</button>
+      <button class="ytab" onclick="setTimeframe('io','12m',this)">12M</button>
+      <button class="ytab active" onclick="setTimeframe('io','alltime',this)">All time</button>
+      <button class="ytab" onclick="showCustomRange('io',this)">Custom</button>
+    </div>
+    <div class="custom-range" id="custom-range-box-io">
+      <input type="date" id="custom-start-io">
+      <span style="color:var(--text3);font-size:12px">to</span>
+      <input type="date" id="custom-end-io">
+      <button onclick="applyCustomRange('io')">Apply</button>
+    </div>
+  </div>
+  <div class="ccs" style="margin-bottom:12px">The timeframe picks starters by the date they bought their intro offer. Outcomes are lifetime: a starter who converts weeks later still counts as converted.</div>
+
+  <div class="filter-strip">
+    <div class="fg">
+      <label for="f-intro-type-io">Intro offer</label>
+      <select id="f-intro-type-io"><option value="all">All intro offers</option></select>
+    </div>
+  </div>
+
+  <div class="mgrid" id="io-metrics"></div>
+
+  <div class="cc" style="margin-bottom:16px">
+    <div class="cch"><div><div class="cct">What happens after an intro offer?</div><div class="ccs">Lifetime outcome of each starter. "Pending" = bought in the last 30 days and hasn't bought anything else yet.</div></div></div>
+    <div style="height:320px"><canvas id="chartIntroSankey"></canvas></div>
+  </div>
+
+  <div class="cc">
+    <div class="cch"><div><div class="cct">Starters &amp; conversions over time</div><div class="ccs">Weekly (weeks start Monday). Starters counted in the week they bought the intro; conversions in the week they bought their membership or pack.</div></div></div>
+    <div class="h260"><canvas id="chartIntroTrend"></canvas></div>
+  </div>
+</div>
+
+<!-- ══════════════════════ INTRO OFFERS: COMPARISON ══════════════════════ -->
+<div class="page" id="page-io-comparison">
+  <div class="ph"><div>
+    <h1>Comparison <em>&amp; Conversion</em></h1>
+    <div class="ph-sub">Homerun Mayfair · intro offers side by side, and what predicts conversion</div>
+  </div></div>
+
+  <div style="margin-bottom:16px">
+    <div class="ytabs" id="tf-tabs-ioc">
+      <button class="ytab" onclick="setTimeframe('ioc','28d',this)">28D</button>
+      <button class="ytab" onclick="setTimeframe('ioc','mtd',this)">MTD</button>
+      <button class="ytab" onclick="setTimeframe('ioc','lastmonth',this)">Last Month</button>
+      <button class="ytab" onclick="setTimeframe('ioc','ytd',this)">YTD</button>
+      <button class="ytab" onclick="setTimeframe('ioc','12m',this)">12M</button>
+      <button class="ytab active" onclick="setTimeframe('ioc','alltime',this)">All time</button>
+      <button class="ytab" onclick="showCustomRange('ioc',this)">Custom</button>
+    </div>
+    <div class="custom-range" id="custom-range-box-ioc">
+      <input type="date" id="custom-start-ioc">
+      <span style="color:var(--text3);font-size:12px">to</span>
+      <input type="date" id="custom-end-ioc">
+      <button onclick="applyCustomRange('ioc')">Apply</button>
+    </div>
+  </div>
+  <div class="filter-strip">
+    <div class="fg">
+      <label for="f-intro-type-ioc">Intro offer</label>
+      <select id="f-intro-type-ioc"><option value="all">All intro offers</option></select>
+    </div>
+  </div>
+
+  <div class="tc">
+    <div class="tch"><span class="tct">Head-to-head</span><span class="ccs" style="margin:0">Every intro offer, selected timeframe. Conversion = bought a membership or a 5+ class pack.</span></div>
+    <div class="tscroll">
+      <table>
+        <thead><tr><th>Intro offer</th><th>Starters</th><th>Conversion</th><th>Membership</th><th>Pack</th><th>Other intro</th><th>Casual only</th><th>No further</th><th>Pending</th></tr></thead>
+        <tbody id="io-headtohead-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="cc" style="margin-top:16px;margin-bottom:16px">
+    <div class="cch"><div><div class="cct">Conversion speed</div><div class="ccs">Of starters who went on to buy a membership, how quickly they did</div></div></div>
+    <div class="mgrid" id="io-speed-metrics" style="margin-bottom:0"></div>
+  </div>
+
+  <div class="cc" style="margin-bottom:16px">
+    <div class="cch"><div><div class="cct">Does showing up predict conversion?</div><div class="ccs" id="attendance-sub"></div></div></div>
+    <div class="mgrid" id="io-attendance-stats" style="margin-bottom:12px"></div>
+    <div class="h260"><canvas id="chartAttendanceConversion"></canvas></div>
+  </div>
+
+  <div class="cc">
+    <div class="cch"><div><div class="cct">Time to convert (membership)</div><div class="ccs" id="time-to-convert-sub"></div></div></div>
+    <div class="h260"><canvas id="chartTimeToConvert"></canvas></div>
+  </div>
+</div>
+
 <!-- ══════════════════════ CLASS PERFORMANCE: UTILIZATION ══════════════════════ -->
 <div class="page" id="page-cp-overview">
   <div class="ph"><div>
@@ -333,12 +452,19 @@ tbody tr:hover td{background:var(--bg3)}
   <div class="mgrid" id="cp-metrics"></div>
 
   <div class="cc" style="margin-bottom:16px">
+    <div class="cch"><div><div class="cct">Booking source: direct vs third-party</div><div class="ccs">Share of paid visits (check-ins, late cancels, no-shows) by where the booking came from. Third-party = ClassPass / Wellhub tags in Mariana Tek. Private-class holds count as direct.</div></div></div>
+    <div class="mgrid" id="cp-booking-metrics" style="margin-bottom:12px"></div>
+    <div class="h260"><canvas id="chartBookingSource"></canvas></div>
+  </div>
+
+  <div class="cc" style="margin-bottom:16px">
     <div class="cch">
       <div><div class="cct">Utilization heatmap</div><div class="ccs" id="cp-hm-sub">Day of week × class time, selected timeframe</div></div>
       <div class="coach-select-wrap">
         <select id="cp-hm-metric" onchange="renderClassPerformance()" style="background:var(--bg3);color:var(--text);border:1px solid var(--border2);border-radius:6px;padding:5px 9px;font-size:11.5px">
           <option value="util">% Utilization</option>
           <option value="paid">% Paid Visits</option>
+          <option value="direct">% Direct bookings</option>
           <option value="count">Class Count</option>
         </select>
       </div>
@@ -388,6 +514,8 @@ function goTo(pageName, btn) {
   btn.classList.add('active');
   if (pageName === 'mh-overview') renderOverview();
   if (pageName === 'cp-overview') renderClassPerformance();
+  if (pageName === 'io-overview') renderIntroOffersOverview();
+  if (pageName === 'io-comparison') renderIntroComparison();
 }
 function toggleGroup(groupName) {
   document.getElementById('group-' + groupName).classList.toggle('open');
@@ -449,10 +577,13 @@ function toISO(d) { return d.toISOString().slice(0, 10); }
 // ════════════════════════════════════════════════════════════════
 let HISTORY_ROWS = [], LIVE_ROWS = [];
 let CP_SESSION_ROWS = [], CP_HISTORY_ROWS = [], CP_CANCEL_ROWS = [];
+let IO_STARTER_ROWS = [], MEMBERSHIP_DAILY_ROWS = [], CP_CANCEL_DAILY_ROWS = [];
 
 const PAGES = {
   ov: { studio: 'all', tier: 'all', timeframe: '28d', customRange: null },
   cp: { studio: 'all', tier: 'all', timeframe: '28d', customRange: null },
+  io: { studio: 'all', tier: 'all', timeframe: 'alltime', customRange: null },
+  ioc: { studio: 'all', tier: 'all', timeframe: 'alltime', customRange: null },
 };
 let COMPARE_MODES = { ov: 'none', cp: 'none' };
 
@@ -501,6 +632,8 @@ function toggleCompareBox(page) {
 function renderPage(page) {
   if (page === 'ov') renderOverview();
   if (page === 'cp') renderClassPerformance();
+  if (page === 'io') renderIntroOffersOverview();
+  if (page === 'ioc') renderIntroComparison();
 }
 
 function populateFilters() {
@@ -730,7 +863,7 @@ function normalizeSession(r) {
   const hour = time ? String(time).slice(0, 5) : null;
   return {
     studio: r.Location,
-    date: r['Class Date'],
+    date: normDate(r['Class Date']),
     time: String(time),
     hour,
     dayOfWeek: r['Class Day of Week'],
@@ -745,6 +878,12 @@ function normalizeSession(r) {
     utilPct: r['% Utilization'] != null && r['% Utilization'] !== '' ? Number(r['% Utilization']) : null,
     paidVisits: Number(r['Paid Visits']) || 0,
     paidPct: r['Total % Paid Visits'] != null && r['Total % Paid Visits'] !== '' ? Number(r['Total % Paid Visits']) : null,
+    hasBooking: r['Direct Bookings'] != null && r['Direct Bookings'] !== '',
+    directB: Number(r['Direct Bookings']) || 0,
+    thirdB: Number(r['Third-Party Bookings']) || 0,
+    classpassB: Number(r['ClassPass Bookings']) || 0,
+    wellhubB: Number(r['Wellhub Bookings']) || 0,
+    otherB: Number(r['Other Third-Party Bookings']) || 0,
   };
 }
 function ensureCPNormalized() {
@@ -843,8 +982,13 @@ function buildHeatmap(containerId, rows, metric) {
   rows.forEach(r => {
     if (!r.dayOfWeek || !r.hour) return;
     const key = r.dayOfWeek + '|' + r.hour;
-    if (!cells.has(key)) cells.set(key, { sum: 0, n: 0 });
+    if (!cells.has(key)) cells.set(key, { sum: 0, n: 0, direct: 0, paid: 0 });
     const c = cells.get(key);
+    if (metric === 'direct') {
+      // Share of a mix: sum of direct / sum of paid visits, never an average of per-class percentages
+      if (r.hasBooking) { c.direct += r.directB; c.paid += r.directB + r.thirdB; c.n += 1; }
+      return;
+    }
     const v = metric === 'util' ? r.utilPct : metric === 'paid' ? r.paidPct : 1;
     if (v != null) { c.sum += v; c.n += 1; }
   });
@@ -862,8 +1006,8 @@ function buildHeatmap(containerId, rows, metric) {
     html += `<div class="hm-rowlabel">${day}</div>`;
     hours.forEach(hour => {
       const c = cells.get(day + '|' + hour);
-      if (!c || c.n === 0) { html += `<div class="hm-cell empty"></div>`; return; }
-      const avg = c.sum / c.n;
+      if (!c || c.n === 0 || (metric === 'direct' && c.paid === 0)) { html += `<div class="hm-cell empty"></div>`; return; }
+      const avg = metric === 'direct' ? (c.direct / c.paid) * 100 : c.sum / c.n;
       const bg = metric === 'count' ? heatColor((c.n / maxCount) * 100) : heatColor(avg);
       const label = metric === 'count' ? c.n : avg.toFixed(0) + '%';
       const tip = `${day} ${hour} — ${metric === 'count' ? c.n + ' classes' : avg.toFixed(1) + '%'} (n=${c.n})`;
@@ -947,7 +1091,8 @@ function renderClassPerformance() {
   const daysInRange = Math.max(1, Math.round((new Date(cpEnd) - new Date(cpStart)) / 86400000) + 1);
   const avgPerDay = totalClasses / daysInRange;
 
-  let compHtml = { classes: '', cancelled: '', util: '', paid: '', perDay: '' };
+  const booking = bookingTotals(rows);
+  let compHtml = { classes: '', cancelled: '', util: '', paid: '', perDay: '', direct: '' };
   if (COMPARE_MODES.cp !== 'none') {
     const compRows = getCPComparisonRows('cp');
     const compBounds = getComparisonBounds('cp');
@@ -962,6 +1107,11 @@ function renderClassPerformance() {
       const compAvgPaid = mean(compRows.map(r => r.paidPct));
       compHtml.util = (avgUtil != null && compAvgUtil != null) ? `<div class="ms ${avgUtil - compAvgUtil >= 0 ? 'pos-text' : 'neg-text'}">${(avgUtil - compAvgUtil >= 0 ? '+' : '')}${(avgUtil - compAvgUtil).toFixed(1)}pp ${compLabel}</div>` : '';
       compHtml.paid = (avgPaid != null && compAvgPaid != null) ? `<div class="ms ${avgPaid - compAvgPaid >= 0 ? 'pos-text' : 'neg-text'}">${(avgPaid - compAvgPaid >= 0 ? '+' : '')}${(avgPaid - compAvgPaid).toFixed(1)}pp ${compLabel}</div>` : '';
+      const compBooking = bookingTotals(compRows);
+      if (booking.pctDirect != null && compBooking.pctDirect != null) {
+        const d = booking.pctDirect - compBooking.pctDirect;
+        compHtml.direct = `<div class="ms ${d >= 0 ? 'pos-text' : 'neg-text'}">${d >= 0 ? '+' : ''}${d.toFixed(1)}pp ${compLabel}</div>`;
+      }
       if (compBounds) {
         const compDays = Math.max(1, Math.round((new Date(compBounds.end) - new Date(compBounds.start)) / 86400000) + 1);
         const compAvgPerDay = compRows.length / compDays;
@@ -976,7 +1126,9 @@ function renderClassPerformance() {
     <div class="mc neg"><div class="ml">Classes cancelled</div><div class="mv">${cancelledCount.toLocaleString()}</div>${compHtml.cancelled}<div class="ms">All cancelled sessions on the schedule — can include a class entered by mistake or a coach training session, not only genuine lost classes</div></div>
     <div class="mc"><div class="ml">Avg utilization</div><div class="mv">${avgUtil == null ? '—' : avgUtil.toFixed(1) + '%'}</div>${compHtml.util}<div class="ms">People who actually attended (checked-in only)</div></div>
     <div class="mc"><div class="ml">Avg paid visit %</div><div class="mv">${avgPaid == null ? '—' : avgPaid.toFixed(1) + '%'}</div>${compHtml.paid}<div class="ms">Includes late cancellations &amp; no-shows — still paid for, whether or not they attended</div></div>
+    <div class="mc pos"><div class="ml">% direct bookings</div><div class="mv">${booking.pctDirect == null ? '—' : booking.pctDirect.toFixed(1) + '%'}</div>${compHtml.direct}<div class="ms">${booking.available ? 'Of paid visits, booked directly with Homerun (not ClassPass / Wellhub)' : 'Needs the updated class pipeline — run Daily Class Performance'}</div></div>
   `;
+  renderBookingSource(rows, booking);
 
   const metric = document.getElementById('cp-hm-metric').value;
   buildHeatmap('cp-heatmap-single', rows, metric);
@@ -1012,6 +1164,234 @@ function renderClassPerformance() {
   }, plugins: { legend: { labels: { color: C.text2, font: { size: 11 } } } } } });
 }
 
+// ════════════════════════════════════════════════════════════════
+// BOOKING SOURCE (direct vs third-party)
+// % direct = Σ direct ÷ Σ paid visits for the selection (a SUM share,
+// never an average of per-class percentages). Direct + third-party
+// always equals paid visits.
+// ════════════════════════════════════════════════════════════════
+function bookingTotals(rows) {
+  const withData = rows.filter(r => r.hasBooking);
+  const t = { available: withData.length > 0, direct: 0, third: 0, classpass: 0, wellhub: 0, other: 0 };
+  withData.forEach(r => { t.direct += r.directB; t.third += r.thirdB; t.classpass += r.classpassB; t.wellhub += r.wellhubB; t.other += r.otherB; });
+  t.paid = t.direct + t.third;
+  t.pctDirect = t.paid > 0 ? (t.direct / t.paid) * 100 : null;
+  return t;
+}
+function mondayOf(iso) {
+  const d = new Date(iso + 'T00:00:00Z');
+  const dow = (d.getUTCDay() + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - dow);
+  return d.toISOString().slice(0, 10);
+}
+function renderBookingSource(rows, t) {
+  const share = n => t.paid > 0 ? (n / t.paid * 100).toFixed(1) + '%' : '—';
+  document.getElementById('cp-booking-metrics').innerHTML = !t.available
+    ? `<div class="mc"><div class="ml">No booking-source data yet</div><div class="ms">Run the Daily Class Performance workflow once with the updated scripts.</div></div>`
+    : `
+    <div class="mc pos"><div class="ml">Direct</div><div class="mv">${share(t.direct)}</div><div class="ms">${t.direct.toLocaleString()} paid visits</div></div>
+    <div class="mc"><div class="ml">ClassPass</div><div class="mv">${share(t.classpass)}</div><div class="ms">${t.classpass.toLocaleString()} paid visits</div></div>
+    <div class="mc"><div class="ml">Wellhub</div><div class="mv">${share(t.wellhub)}</div><div class="ms">${t.wellhub.toLocaleString()} paid visits</div></div>
+    ${t.other > 0 ? `<div class="mc"><div class="ml">Other third-party</div><div class="mv">${share(t.other)}</div><div class="ms">${t.other.toLocaleString()} paid visits</div></div>` : ''}`;
+  const byWeek = new Map();
+  rows.filter(r => r.hasBooking && r.date).forEach(r => {
+    const wk = mondayOf(r.date);
+    if (!byWeek.has(wk)) byWeek.set(wk, { direct: 0, third: 0 });
+    const e = byWeek.get(wk); e.direct += r.directB; e.third += r.thirdB;
+  });
+  const weeks = Array.from(byWeek.keys()).sort();
+  const pct = (w, k) => { const e = byWeek.get(w); const tot = e.direct + e.third; return tot ? e[k] / tot * 100 : null; };
+  mk('chartBookingSource', { type: 'bar', data: { labels: weeks, datasets: [
+    { label: 'Direct', data: weeks.map(w => pct(w, 'direct')), backgroundColor: 'rgba(45,212,191,0.65)', stack: 's' },
+    { label: 'Third-party', data: weeks.map(w => pct(w, 'third')), backgroundColor: 'rgba(124,147,201,0.55)', stack: 's' },
+  ] }, options: { responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { labels: { color: C.text2, font: { size: 11 } } },
+      tooltip: { callbacks: { label: ctx => { const e = byWeek.get(ctx.label); const k = ctx.datasetIndex === 0 ? 'direct' : 'third'; return `${ctx.dataset.label}: ${ctx.parsed.y == null ? '—' : ctx.parsed.y.toFixed(1) + '%'} (${e[k]} of ${e.direct + e.third})`; } } } },
+    scales: { x: { ...xsc(), stacked: true }, y: { ...ysc(), stacked: true, max: 100, ticks: { ...ysc().ticks, callback: v => v + '%' } } } } });
+}
+
+// ════════════════════════════════════════════════════════════════
+// INTRO OFFERS
+// ════════════════════════════════════════════════════════════════
+const IO_CONVERTED = ['Converted to Membership', 'Converted to Pack'];
+const IO_PENDING = 'Pending (recent, no outcome yet)';
+// THE conversion definition, used everywhere: share of starters who bought
+// a membership OR a 5+ pack (someone who did both counts once).
+function ioConversionOf(rows) {
+  if (!rows.length) return null;
+  return rows.filter(r => IO_CONVERTED.includes(r.outcome)).length / rows.length * 100;
+}
+function normDate(v) {
+  if (v == null || v === '') return '';
+  const m = String(v).match(/^Date\((\d+),(\d+),(\d+)/);
+  if (m) return `${m[1]}-${String(+m[2] + 1).padStart(2, '0')}-${String(+m[3]).padStart(2, '0')}`;
+  return String(v).slice(0, 10);
+}
+function normalizeStarter(r) {
+  const intro = normDate(r.intro_date);
+  let outcome = r.outcome;
+  // "No Further Purchase" within 30 days of buying = too early to tell
+  if (outcome === 'No Further Purchase' && (new Date() - new Date(intro)) / 86400000 < 30) outcome = IO_PENDING;
+  const d = r.days_to_convert;
+  return { ...r, intro_date: intro, conversion_date: normDate(r.conversion_date), outcome,
+    days_to_convert: d == null || d === '' ? null : Number(d), classes_attended: Number(r.classes_attended) || 0 };
+}
+function ioTypes() { return Array.from(new Set(IO_STARTER_ROWS.map(r => r.intro_type).filter(Boolean))).sort(); }
+function ioKindOf(type) { const r = IO_STARTER_ROWS.find(x => x.intro_type === type); return r ? r.intro_kind : 'membership'; }
+function getIntroRows(page, selId) {
+  const type = document.getElementById(selId).value;
+  const { start, end } = getDateBounds(page);
+  const rows = IO_STARTER_ROWS.filter(r => r.intro_date >= start && r.intro_date <= end && (type === 'all' || r.intro_type === type));
+  return { rows, type, start, end };
+}
+function median(arr) { if (!arr.length) return null; const s = [...arr].sort((a, b) => a - b); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
+function ioEmpty(elId, msg) { document.getElementById(elId).innerHTML = `<div class="mc"><div class="ml">No data</div><div class="ms">${msg}</div></div>`; }
+
+function renderIntroOffersOverview() {
+  const { rows, type, start, end } = getIntroRows('io', 'f-intro-type-io');
+  const total = rows.length;
+  const count = o => rows.filter(r => r.outcome === o).length;
+  const pctOf = n => total ? (n / total * 100).toFixed(1) + '%' : '—';
+  const conv = ioConversionOf(rows);
+  if (!IO_STARTER_ROWS.length) ioEmpty('io-metrics', 'No intro offer starters yet. If you expected some, run the Daily Intro Offers workflow.');
+  else if (!total) ioEmpty('io-metrics', 'No intro offer starters in this timeframe.');
+  else document.getElementById('io-metrics').innerHTML = `
+    <div class="mc"><div class="ml">Intro offers sold (starters)</div><div class="mv">${total.toLocaleString()}</div></div>
+    <div class="mc pos"><div class="ml">Conversion rate</div><div class="mv pos-text">${conv.toFixed(1)}%</div><div class="ms">Bought a membership or a 5+ class pack</div></div>
+    <div class="mc"><div class="ml">Converted to membership</div><div class="mv">${pctOf(count('Converted to Membership'))}</div><div class="ms">${count('Converted to Membership')} people</div></div>
+    <div class="mc"><div class="ml">Converted to pack</div><div class="mv">${pctOf(count('Converted to Pack'))}</div><div class="ms">${count('Converted to Pack')} people</div></div>
+    <div class="mc"><div class="ml">Pending (bought &lt;30 days ago)</div><div class="mv">${pctOf(count(IO_PENDING))}</div><div class="ms">${count(IO_PENDING)} people, too early to tell</div></div>
+    <div class="mc neg"><div class="ml">No further purchase</div><div class="mv neg-text">${pctOf(count('No Further Purchase'))}</div><div class="ms">${count('No Further Purchase')} people, 30+ days on</div></div>
+  `;
+
+  const flows = new Map();
+  rows.forEach(r => { const k = r.intro_type + '|' + r.outcome; flows.set(k, (flows.get(k) || 0) + 1); });
+  const sankeyData = Array.from(flows.entries()).map(([k, flow]) => { const [from, to] = k.split('|'); return { from, to, flow }; });
+  const typeColors = [C.enmei, C.slate, '#c9a86a', '#9b7fd1'];
+  const nodeColors = { 'Converted to Membership': C.teal, 'Converted to Pack': '#7dd3c0', 'Tried Another Intro Offer': '#c9a86a',
+    'Casual Re-engagement Only': C.text2, 'No Further Purchase': C.neg, [IO_PENDING]: '#5b6b8c' };
+  ioTypes().forEach((t, i) => { nodeColors[t] = typeColors[i % typeColors.length]; });
+  const sankeyOk = window.Chart && Chart.registry && (() => { try { return !!Chart.registry.getController('sankey'); } catch (e) { return false; } })();
+  if (sankeyOk && sankeyData.length) {
+    mk('chartIntroSankey', { type: 'sankey', data: { datasets: [{ data: sankeyData,
+      colorFrom: ctx => nodeColors[ctx.dataset.data[ctx.dataIndex].from] || '#888',
+      colorTo: ctx => nodeColors[ctx.dataset.data[ctx.dataIndex].to] || '#888',
+      colorMode: 'gradient', borderWidth: 0, color: C.text2 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
+  } else if (charts.chartIntroSankey) { charts.chartIntroSankey.destroy(); delete charts.chartIntroSankey; }
+
+  // Weekly trend: starters by intro week; conversions by the week they happened
+  const allOfType = IO_STARTER_ROWS.filter(r => type === 'all' || r.intro_type === type);
+  const wk = new Map();
+  const bump = (w, k) => { if (!wk.has(w)) wk.set(w, { starters: 0, mem: 0, pack: 0 }); wk.get(w)[k]++; };
+  allOfType.forEach(r => {
+    if (r.intro_date >= start && r.intro_date <= end) bump(mondayOf(r.intro_date), 'starters');
+    if (r.conversion_date && r.conversion_date >= start && r.conversion_date <= end) bump(mondayOf(r.conversion_date), r.outcome === 'Converted to Pack' ? 'pack' : 'mem');
+  });
+  const weeks = Array.from(wk.keys()).sort();
+  mk('chartIntroTrend', { type: 'line', data: { labels: weeks, datasets: [
+    { label: 'Starters', data: weeks.map(w => wk.get(w).starters), borderColor: C.slate, tension: .3, pointRadius: 3 },
+    { label: 'Converted (membership)', data: weeks.map(w => wk.get(w).mem), borderColor: C.teal, tension: .3, pointRadius: 3 },
+    { label: 'Converted (pack)', data: weeks.map(w => wk.get(w).pack), borderColor: C.enmei, tension: .3, pointRadius: 3 },
+  ] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: C.text2, font: { size: 11 } } } }, scales: { x: xsc(), y: ysc() } } });
+}
+
+function renderIntroComparison() {
+  const { rows, type, start, end } = getIntroRows('ioc', 'f-intro-type-ioc');
+
+  // Head-to-head: every intro type, respects timeframe (ignores the dropdown)
+  const dated = IO_STARTER_ROWS.filter(r => r.intro_date >= start && r.intro_date <= end);
+  const pct = (rs, o) => rs.length ? (rs.filter(r => r.outcome === o).length / rs.length * 100).toFixed(1) + '%' : '—';
+  const types = ioTypes();
+  document.getElementById('io-headtohead-body').innerHTML = !types.length
+    ? `<tr><td colspan="9" class="empty-state">No intro offer starters yet.</td></tr>`
+    : types.map(t => {
+      const rs = dated.filter(r => r.intro_type === t);
+      if (!rs.length) return `<tr><td>${t}</td><td colspan="8" class="empty-state">No starters in this timeframe</td></tr>`;
+      return `<tr><td>${t}</td><td>${rs.length}</td><td class="pos-text">${ioConversionOf(rs).toFixed(1)}%</td>
+        <td>${pct(rs, 'Converted to Membership')}</td><td>${pct(rs, 'Converted to Pack')}</td><td>${pct(rs, 'Tried Another Intro Offer')}</td>
+        <td>${pct(rs, 'Casual Re-engagement Only')}</td><td class="neg-text">${pct(rs, 'No Further Purchase')}</td><td>${pct(rs, IO_PENDING)}</td></tr>`;
+    }).join('');
+
+  // Conversion speed (membership converters)
+  const days = rows.filter(r => r.outcome === 'Converted to Membership' && r.days_to_convert != null).map(r => r.days_to_convert);
+  const within = n => days.length ? (days.filter(d => d <= n).length / days.length * 100).toFixed(0) + '%' : '—';
+  document.getElementById('io-speed-metrics').innerHTML = `
+    <div class="mc"><div class="ml">Within 7 days</div><div class="mv">${within(7)}</div><div class="ms">of ${days.length} membership converter${days.length === 1 ? '' : 's'}</div></div>
+    <div class="mc"><div class="ml">Within 30 days</div><div class="mv">${within(30)}</div><div class="ms">of ${days.length}</div></div>
+    <div class="mc"><div class="ml">Median days to convert</div><div class="mv">${median(days) == null ? '—' : median(days)}</div></div>`;
+
+  // Attendance vs conversion: buckets depend on the kind of intro
+  const attType = type !== 'all' ? type : (types.find(t => ioKindOf(t) === 'membership') || types[0]);
+  const kind = ioKindOf(attType);
+  const attRows = rows.filter(r => r.intro_type === attType);
+  document.getElementById('attendance-sub').textContent = !attType ? 'No intro offer starters yet.' :
+    `${attType}, selected timeframe: conversion rate (membership or pack) by classes attended during the intro offer.` +
+    (type === 'all' ? ' Pick an intro offer above to see another.' : '') +
+    ' Attended = check-ins from the purchase until their next purchase (max 30 days).';
+  const att = attRows.map(r => r.classes_attended);
+  document.getElementById('io-attendance-stats').innerHTML = `
+    <div class="mc"><div class="ml">Avg classes attended</div><div class="mv">${att.length ? (att.reduce((a, b) => a + b, 0) / att.length).toFixed(1) : '—'}</div></div>
+    <div class="mc"><div class="ml">Median classes attended</div><div class="mv">${median(att) == null ? '—' : median(att)}</div></div>
+    <div class="mc"><div class="ml">Never attended</div><div class="mv">${att.length ? (att.filter(n => n === 0).length / att.length * 100).toFixed(0) + '%' : '—'}</div><div class="ms">${att.filter(n => n === 0).length} people</div></div>`;
+  const bucket = kind === 'credit'
+    ? n => n === 0 ? '0' : n >= 4 ? '4+' : String(n)
+    : n => n === 0 ? '0' : n <= 2 ? '1-2' : n <= 4 ? '3-4' : n <= 6 ? '5-6' : '7+';
+  const order = kind === 'credit' ? ['0', '1', '2', '3', '4+'] : ['0', '1-2', '3-4', '5-6', '7+'];
+  const groups = new Map();
+  attRows.forEach(r => { const b = bucket(r.classes_attended); if (!groups.has(b)) groups.set(b, []); groups.get(b).push(r); });
+  const used = order.filter(b => groups.has(b));
+  mk('chartAttendanceConversion', { type: 'bar', data: { labels: used.map(b => `${b} classes (n=${groups.get(b).length})`),
+    datasets: [{ data: used.map(b => ioConversionOf(groups.get(b))), backgroundColor: C.enmei, borderRadius: 4, borderSkipped: false }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false },
+      tooltip: { callbacks: { label: ctx => `Conversion: ${ctx.parsed.y.toFixed(1)}%` } } },
+      scales: { x: xsc(), y: { ...ysc(), max: 100, ticks: { ...ysc().ticks, callback: v => v + '%' } } } } });
+
+  // Time to convert
+  document.getElementById('time-to-convert-sub').textContent =
+    `Days from buying the intro offer to buying a membership, for the ${days.length} starter${days.length === 1 ? '' : 's'} in this timeframe who converted to a membership.`;
+  const labels = ['0-7 days', '8-30 days', '31-90 days', '90+ days'];
+  const counts = [days.filter(d => d <= 7).length, days.filter(d => d >= 8 && d <= 30).length, days.filter(d => d >= 31 && d <= 90).length, days.filter(d => d > 90).length];
+  mk('chartTimeToConvert', { type: 'bar', data: { labels, datasets: [{ data: counts, backgroundColor: C.teal, borderRadius: 4, borderSkipped: false }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: xsc(), y: ysc() } } });
+}
+
+function populateIntroFilters() {
+  ['f-intro-type-io', 'f-intro-type-ioc'].forEach(id => {
+    const sel = document.getElementById(id);
+    ioTypes().forEach(t => sel.insertAdjacentHTML('beforeend', `<option value="${t}">${t}</option>`));
+    sel.addEventListener('change', () => renderPage(id.endsWith('ioc') ? 'ioc' : 'io'));
+  });
+}
+
+// ════════════════════════════════════════════════════════════════
+// DATA STATUS LINES -- say exactly why something is missing or stale
+// ════════════════════════════════════════════════════════════════
+function hasCols(rows, cols) { return rows.length > 0 && cols.every(c => c in rows[0]); }
+function daysAgoISO(n) { const d = new Date(); d.setDate(d.getDate() - n); return toISO(d); }
+function renderDataStatus(loaded) {
+  const msgs = [];
+  const WF = { mem: 'Daily Membership Dashboard Data Refresh', cls: 'Daily Class Performance Dashboard Data Refresh', io: 'Daily Intro Offers Dashboard Data Refresh' };
+  const need = (ok, tab, wf) => { if (!ok) msgs.push(`<b>${tab}</b> is missing or empty. In GitHub → Actions, run <b>${wf}</b>.`); };
+  need(hasCols(CP_SESSION_ROWS, ['Class Date', '% Utilization']), 'ClassPerformance_Sessions', WF.cls);
+  need(loaded.ioOk, 'IntroOffers_Starters', WF.io);
+  need(hasCols(MEMBERSHIP_DAILY_ROWS, ['date', 'active_count']), 'Membership_Daily', WF.mem);
+  need(loaded.cancelDailyOk, 'ClassPerformance_CancellationsDaily', WF.cls);
+  if (CP_SESSION_ROWS.length && !CP_NORM_ROWS.some(r => r.hasBooking))
+    msgs.push(`Booking source (direct vs third-party) needs the updated class pipeline. Run <b>${WF.cls}</b>.`);
+  if (hasCols(MEMBERSHIP_DAILY_ROWS, ['date'])) {
+    const last = MEMBERSHIP_DAILY_ROWS.map(r => normDate(r.date)).sort().pop();
+    if (last < daysAgoISO(1)) msgs.push(`Membership data ends on <b>${last}</b>. It refreshes daily at 08:00 UTC; if that's passed, run <b>${WF.mem}</b>.`);
+  }
+  if (CP_NORM_ROWS.length) {
+    const last = CP_NORM_ROWS.map(r => r.date).filter(Boolean).sort().pop();
+    if (last < daysAgoISO(3)) msgs.push(`Class data ends on <b>${last}</b>. It refreshes daily at 09:00 UTC; if that's passed, run <b>${WF.cls}</b>.`);
+  }
+  const el = document.getElementById('data-status');
+  el.innerHTML = msgs.map(m => `<div>${m}</div>`).join('');
+  el.classList.toggle('show', msgs.length > 0);
+}
+
 
 async function init() {
   const loading = document.getElementById('loading');
@@ -1026,9 +1406,21 @@ async function init() {
 
     // Class Performance tabs -- non-blocking, so a problem here doesn't
     // take down Membership Overview.
-    const [cpSessionsResult, cpHistoryResult, cpCancelResult] = await Promise.allSettled([
+    const [cpSessionsResult, cpHistoryResult, cpCancelResult, ioResult, dailyResult, cancelDailyResult] = await Promise.allSettled([
       fetchSheet('ClassPerformance_Sessions'), fetchSheet('ClassPerformance_History'), fetchSheet('ClassPerformance_Cancellations'),
+      fetchSheet('IntroOffers_Starters'), fetchSheet('Membership_Daily'), fetchSheet('ClassPerformance_CancellationsDaily'),
     ]);
+    const rowsOf = r => r.status === 'fulfilled' ? parseGvizTable(r.value) : [];
+    // gviz can quietly return ANOTHER tab when the one asked for doesn't
+    // exist, so each tab is only trusted if it has its own columns.
+    const ioRaw = rowsOf(ioResult);
+    const ioOk = ioRaw.length === 0 ? (ioResult.status === 'fulfilled' && ioResult.value.cols.some(c => (c.label || c.id) === 'intro_type')) : hasCols(ioRaw, ['intro_type', 'outcome']);
+    IO_STARTER_ROWS = ioOk ? ioRaw.map(normalizeStarter) : [];
+    const dailyRaw = rowsOf(dailyResult);
+    MEMBERSHIP_DAILY_ROWS = hasCols(dailyRaw, ['date', 'active_count']) ? dailyRaw : [];
+    const cdRaw = rowsOf(cancelDailyResult);
+    const cancelDailyOk = cancelDailyResult.status === 'fulfilled' && cancelDailyResult.value.cols.some(c => (c.label || c.id) === 'cancelled_all');
+    CP_CANCEL_DAILY_ROWS = cancelDailyOk ? cdRaw : [];
     CP_SESSION_ROWS = cpSessionsResult.status === 'fulfilled' ? parseGvizTable(cpSessionsResult.value) : [];
     CP_HISTORY_ROWS = cpHistoryResult.status === 'fulfilled' ? parseGvizTable(cpHistoryResult.value) : [];
     CP_CANCEL_ROWS = cpCancelResult.status === 'fulfilled' ? parseGvizTable(cpCancelResult.value) : [];
@@ -1038,8 +1430,13 @@ async function init() {
     status.classList.add('ok');
     loading.classList.add('hidden');
     populateFilters();
+    populateIntroFilters();
+    ensureCPNormalized();
+    renderDataStatus({ ioOk, cancelDailyOk });
     renderOverview();
     renderClassPerformance();
+    renderIntroOffersOverview();
+    renderIntroComparison();
   } catch (e) {
     console.error('Sheet load error:', e);
     loading.classList.add('hidden');
