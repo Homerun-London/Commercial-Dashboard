@@ -15,7 +15,7 @@ STUDIO_NAME = "Mayfair"
 # account (Editor) and publish it to web (File -> Share -> Publish to web)
 # so docs/index.html can read it. Paste the ID from the Sheet's URL here --
 # the long string between /d/ and /edit.
-DASHBOARD_SHEET_ID = "PASTE_HOMERUN_SHEET_ID_HERE"
+DASHBOARD_SHEET_ID = "12mmWJHy6dm9E3iIMvDgKrXwRbxHVIhqWZfBBcK2F0tc"
 
 # How far back the class pipeline pulls. Months before Homerun had any
 # classes just come back empty, so it's safe to leave this early.
